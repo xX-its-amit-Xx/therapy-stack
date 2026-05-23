@@ -1,0 +1,27 @@
+# Personal / unpublished writeups.
+writeup/
+
+# Python.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Jupyter scratch outputs.
+demos/_outputs/
+
+# Local env.
+.env
+.env.local
+
+# OS / editor.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts.
+build/
+dist/

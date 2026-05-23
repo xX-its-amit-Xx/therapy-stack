@@ -1,0 +1,31 @@
+# Spin up the full therapy-stack locally.
+#
+#   docker compose up           # run the e2e demo, write scorecard to ./assets/
+#   docker compose up notebook  # launch jupyter on http://localhost:8888
+#
+# Requires ANTHROPIC_API_KEY in your environment or a .env file alongside this.
+
+services:
+  e2e:
+    image: python:3.11-slim
+    working_dir: /work
+    volumes:
+      - ./:/work
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    command: >
+      bash -lc "bash scripts/install_all.sh && bash scripts/run_e2e.sh"
+
+  notebook:
+    image: python:3.11-slim
+    working_dir: /work
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/work
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    command: >
+      bash -lc "bash scripts/install_all.sh &&
+                jupyter notebook --ip=0.0.0.0 --port=8888
+                --no-browser --allow-root --NotebookApp.token=''"

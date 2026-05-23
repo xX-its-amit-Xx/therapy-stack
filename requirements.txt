@@ -1,0 +1,16 @@
+# Pinned versions for therapy-stack v0.1.0.
+# This file is the source of truth for reproducibility — every checked-in
+# scorecard was generated with these exact versions.
+
+# Child packages — the four components of the stack.
+g2p-rag==0.1.0
+fda-strategy-triples==0.1.0
+therapy-agent==0.1.0
+bio-rag-eval==0.1.0
+
+# Orchestration dependencies.
+anthropic==0.39.0
+jupyter==1.1.1
+notebook==7.2.2
+pyyaml==6.0.2
+tqdm==4.66.5
