@@ -12,6 +12,12 @@ venv/
 # Jupyter scratch outputs.
 demos/_outputs/
 
+# Sandbox: keep source files, ignore venv/data/intermediate results.
+sandbox/.venv/
+sandbox/models/
+sandbox/results_hard*.json
+sandbox/results_all.json
+
 # Local env.
 .env
 .env.local

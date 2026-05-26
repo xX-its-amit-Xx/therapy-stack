@@ -4,7 +4,7 @@
 
 `therapy-stack` is the orchestration layer that composes four focused packages into a single end-to-end demo: given a disease gene with a known causal mechanism, it generates a ranked list of therapeutic strategy hypotheses and scores them against FDA-approved precedents.
 
-This repo contains **no model logic** — only orchestration, docs, and demo assets. Every algorithm lives in one of the four child repos below.
+Domain algorithms live in the four child repos. This repo holds the orchestration, the published docs, and a minimal end-to-end harness in [`sandbox/`](sandbox/) that runs the whole pipeline locally against real data with **no API keys required** — a free, open-source 3 B Llama model on CPU.
 
 ---
 
@@ -21,7 +21,7 @@ flowchart LR
     end
 
     subgraph agent[Reasoning]
-        TA[therapy-agent<br/><sub>LLM agent that<br/>proposes strategies</sub>]
+        TA[g2p-agent<br/><sub>LLM agent that<br/>proposes strategies</sub>]
     end
 
     subgraph eval[Evaluation]
@@ -35,74 +35,91 @@ flowchart LR
     BRE -- scorecard --> Output[(scorecard.html)]
 ```
 
-See [assets/architecture.png](assets/architecture.png) for a rendered version.
-
 ---
 
 ## Why four repos?
 
-Each child repo solves one well-defined problem and is independently testable, citable, and installable. The split mirrors the natural boundaries of the system: a dataset (`fda-strategy-triples`), a retriever (`g2p-rag`), a reasoner (`therapy-agent`), and a judge (`bio-rag-eval`). Anyone can swap out a single component — a different retriever, a different judge model — without forking the whole stack. `therapy-stack` is the demo that proves the pieces fit together.
+Each child repo solves one well-defined problem and is independently testable, citable, and installable. The split mirrors the natural boundaries of the system: a dataset (`fda-strategy-triples`), a retriever (`g2p-rag`), a reasoner (`g2p-agent`), and a judge (`bio-rag-eval`). Anyone can swap out a single component — a different retriever, a different judge model — without forking the whole stack. `therapy-stack` is the demo that proves the pieces fit together.
 
 Child repos:
 
 | Repo | What it does |
 |---|---|
-| [`fda-strategy-triples`](https://github.com/shenoy-am/fda-strategy-triples) | Curated dataset of FDA-approved therapeutic strategies as (gene, mechanism, drug) triples |
-| [`g2p-rag`](https://github.com/shenoy-am/g2p-rag) | Gene-to-pathway retrieval-augmented index over Reactome, KEGG, and OmniPath |
-| [`therapy-agent`](https://github.com/shenoy-am/therapy-agent) | LLM agent that proposes ranked therapeutic strategies given a gene and pathway context |
-| [`bio-rag-eval`](https://github.com/shenoy-am/bio-rag-eval) | LLM-as-judge evaluation harness with deterministic + semantic scoring |
+| [`fda-strategy-triples`](https://github.com/xX-its-amit-Xx/fda-strategy-triples) | Curated dataset of FDA-approved therapeutic strategies as (gene, mechanism, drug) triples — 10 cases, human-validated against ChEMBL/DrugBank/DailyMed |
+| [`g2p-rag`](https://github.com/xX-its-amit-Xx/g2p-rag) | Hybrid dense+sparse retrieval over the Broad Institute G2P portal (UniProt + AlphaFold + ClinVar) |
+| [`g2p-agent`](https://github.com/xX-its-amit-Xx/g2p-agent) | Claude tool-using agent that answers variant-level questions over the g2p-rag index |
+| [`bio-rag-eval`](https://github.com/xX-its-amit-Xx/bio-rag-eval) | LLM-as-judge evaluation harness with deterministic + semantic scoring |
 
 ---
 
-## Quickstart
+## Quickstart — run the real end-to-end demo locally
 
-```bash
-git clone https://github.com/shenoy-am/therapy-stack.git && cd therapy-stack
-bash scripts/install_all.sh
-bash scripts/run_e2e.sh
-open assets/scorecard_v0.1.0.html
+The runnable demo lives in [`sandbox/`](sandbox/). It uses a free, open-source 3 B Llama model loaded via `llama-cpp-python` — no API keys, no GPU required.
+
+```powershell
+git clone https://github.com/xX-its-amit-Xx/therapy-stack.git
+cd therapy-stack/sandbox
+
+# Python 3.11 venv (uv handles the install)
+uv venv --python 3.11 .venv
+$env:UV_CACHE_DIR = "C:/uv-cache"  # uv cache off the project drive
+
+# Install runtime deps from abetlen's prebuilt CPU wheels
+uv pip install --python ./.venv/Scripts/python.exe `
+    llama-cpp-python `
+    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+uv pip install --python ./.venv/Scripts/python.exe `
+    huggingface_hub pandas pyarrow requests
+uv pip install --python ./.venv/Scripts/python.exe `
+    -e ../../fda-strategy-triples --no-deps
+
+# Download Llama 3.2 3B Instruct Q4_K_M (~1.9 GB)
+./.venv/Scripts/python.exe -c "from huggingface_hub import hf_hub_download; `
+    hf_hub_download( `
+      repo_id='bartowski/Llama-3.2-3B-Instruct-GGUF', `
+      filename='Llama-3.2-3B-Instruct-Q4_K_M.gguf', `
+      local_dir='C:/llama-models')"
+
+# Run all 10 FDA cases end-to-end (~3 min on an 8-core CPU)
+./.venv/Scripts/python.exe run_e2e.py --cases 10 --out results_all.json
 ```
 
-Requires Python 3.11+, an `ANTHROPIC_API_KEY` in your environment, and ~2 GB of disk for the RAG index.
-
-For a containerized run instead:
-
-```bash
-docker compose up
-```
+For the Claude/Anthropic production path (requires `ANTHROPIC_API_KEY` and a built `g2p-rag` index), use the child packages directly — `g2p-agent` is wired to drive Claude end-to-end. The sandbox harness shows the same wiring without that infrastructure.
 
 ---
 
 ## Demos
 
-| Notebook | Description |
+| Path | Description |
 |---|---|
-| [`demos/01_ekterly_walkthrough.ipynb`](demos/01_ekterly_walkthrough.ipynb) | End-to-end walkthrough on the SERPING1 → KLKB1 case (hereditary angioedema, Ekterly) |
-| [`demos/02_brd4780_walkthrough.ipynb`](demos/02_brd4780_walkthrough.ipynb) | UMOD/MUC1 → TMED9 case (autosomal dominant tubulointerstitial kidney disease, BRD4780) |
-| [`demos/03_full_benchmark.ipynb`](demos/03_full_benchmark.ipynb) | Runs all FDA cases in the v0.1.0 set, regenerates the scorecard, renders results |
-
-A 90-second terminal recording of `run_e2e.sh` lives at [assets/demo.gif](assets/demo.gif).
+| [`sandbox/run_e2e.py`](sandbox/run_e2e.py) | Working end-to-end on real FDA cases with a local Llama-3.2-3B model — no API key |
+| [`sandbox/RESULTS.md`](sandbox/RESULTS.md) | Per-case agent traces and ranks from the most recent run |
 
 ---
 
-## Latest scorecard (v0.1.0)
+## Latest scorecard
 
-Rendered from [assets/scorecard_v0.1.0.html](assets/scorecard_v0.1.0.html).
+Real run, **2026-05-26**, Llama-3.2-3B-Instruct (Q4_K_M, llama-cpp-python, CPU), 10 cases from `fda-strategy-triples` v0.1.0. Full traces in [`sandbox/RESULTS.md`](sandbox/RESULTS.md).
 
-| Case | Gene | Approved drug | Strategy recovered | Top-k | Judge score |
-|---|---|---|---|---|---|
-| Hereditary angioedema | SERPING1 | Ekterly (garadacimab) | ✅ KLKB1 inhibition | 1 | 0.94 |
-| ADTKD-MUC1 | MUC1 | BRD4780 (preclinical) | ✅ TMED9 modulation | 2 | 0.88 |
-| Spinal muscular atrophy | SMN1 | Spinraza (nusinersen) | ✅ SMN2 splicing modulation | 1 | 0.96 |
-| Transthyretin amyloidosis | TTR | Onpattro (patisiran) | ✅ TTR knockdown | 1 | 0.97 |
-| Sickle cell disease | HBB | Casgevy (exa-cel) | ✅ BCL11A disruption | 1 | 0.91 |
-| Familial hypercholesterolemia | LDLR | Leqvio (inclisiran) | ✅ PCSK9 knockdown | 1 | 0.95 |
-| Duchenne muscular dystrophy | DMD | Elevidys | ✅ Microdystrophin replacement | 2 | 0.83 |
-| Cystic fibrosis | CFTR | Trikafta | ✅ CFTR potentiation + correction | 1 | 0.92 |
-| Acute hepatic porphyria | ALAS1 | Givlaari | ✅ ALAS1 knockdown | 1 | 0.93 |
-| Hereditary ATTR (polyneuropathy) | TTR | Wainua (eplontersen) | ✅ TTR antisense | 1 | 0.94 |
+| # | Drug | Disease gene(s) | Gold target | Top-1 prediction | Rank | Recovered |
+|---|---|---|---|---|---|---|
+| 1 | Spinraza | SMN1, SMN2 | SMN2 pre-mRNA ISS-N1 | `SMN2` | 1 | ✅ |
+| 2 | Zolgensma | SMN1 | SMN1 transgene | `SMN1` | 1 | ✅ |
+| 3 | Kalydeco | CFTR | CFTR | `CFTR` | 1 | ✅ |
+| 4 | Galafold | GLA | GLA (lysosomal) | `GLA (mRNA)` | 1 | ✅ |
+| 5 | Zokinvy | LMNA | FNTB (farnesyltransferase) | `SREBF1` | — | ❌ |
+| 6 | Amvuttra | TTR | TTR mRNA | `STT3B` | — | ❌ |
+| 7 | Givlaari | HMBS, CPOX, PPOX, ALAS1 | ALAS1 mRNA | `CPOX` | 2 | ✅ |
+| 8 | Evrysdi | SMN1, SMN2 | SMN2 pre-mRNA splice site | `SMN1` | 2 | ✅ |
+| 9 | Casgevy | BCL11A, HBB | BCL11A erythroid enhancer | `MTA2` | 3 | ✅ |
+| 10 | Leqvio | PCSK9, LDLR | PCSK9 mRNA | `LDLR` | 2 | ✅ |
 
-**Overall:** 10/10 cases recovered, mean judge score **0.92**, mean rank **1.2**.
+**Overall:** 8/10 recovered (gold target in top-3), top-1 hits 4/10, mean rank of correct target **1.625**, total wall time ~3 min.
+
+### What the failures tell us
+
+- **Zokinvy (LMNA → FNTB).** The retrieved UniProt PTM field *literally names* FNTA/FNTB as the farnesyltransferase, but the 3 B model fails to chain "progerin's CAAX motif is permanently farnesylated → that traps it at the membrane → block the transferase to release it" and defaults to "fix the nuclear envelope". A larger model or an explicit reasoning scaffold would likely close this.
+- **Amvuttra (TTR → TTR mRNA).** The model over-reasons — proposes blocking glycosylation (STT3B) and RBP4 binding instead of just knocking down the toxic transthyretin. Sometimes "the disease gene IS the target" is the right answer; the prompt biases too hard against that.
 
 ---
 
@@ -115,15 +132,15 @@ If you use `therapy-stack` or any of its components in your research, please cit
   author  = {Shenoy, Amit},
   title   = {therapy-stack: An open-source orchestration layer for AI-driven therapeutic strategy generation},
   year    = {2026},
-  url     = {https://github.com/shenoy-am/therapy-stack},
+  url     = {https://github.com/xX-its-amit-Xx/therapy-stack},
   version = {0.1.0}
 }
 
 @software{shenoy_g2p_rag_2026,
   author  = {Shenoy, Amit},
-  title   = {g2p-rag: Gene-to-pathway retrieval-augmented generation},
+  title   = {g2p-rag: Retrieval-augmented generation over the Broad Institute G2P portal},
   year    = {2026},
-  url     = {https://github.com/shenoy-am/g2p-rag},
+  url     = {https://github.com/xX-its-amit-Xx/g2p-rag},
   version = {0.1.0}
 }
 
@@ -131,15 +148,15 @@ If you use `therapy-stack` or any of its components in your research, please cit
   author  = {Shenoy, Amit},
   title   = {fda-strategy-triples: A curated dataset of FDA-approved therapeutic strategies},
   year    = {2026},
-  url     = {https://github.com/shenoy-am/fda-strategy-triples},
+  url     = {https://github.com/xX-its-amit-Xx/fda-strategy-triples},
   version = {0.1.0}
 }
 
-@software{shenoy_therapy_agent_2026,
+@software{shenoy_g2p_agent_2026,
   author  = {Shenoy, Amit},
-  title   = {therapy-agent: An LLM agent for therapeutic strategy hypothesis generation},
+  title   = {g2p-agent: A retrieval-augmented Claude agent over G2P portal data},
   year    = {2026},
-  url     = {https://github.com/shenoy-am/therapy-agent},
+  url     = {https://github.com/xX-its-amit-Xx/g2p-agent},
   version = {0.1.0}
 }
 
@@ -147,7 +164,7 @@ If you use `therapy-stack` or any of its components in your research, please cit
   author  = {Shenoy, Amit},
   title   = {bio-rag-eval: LLM-as-judge evaluation harness for biomedical RAG},
   year    = {2026},
-  url     = {https://github.com/shenoy-am/bio-rag-eval},
+  url     = {https://github.com/xX-its-amit-Xx/bio-rag-eval},
   version = {0.1.0}
 }
 ```
@@ -161,7 +178,7 @@ If you use `therapy-stack` or any of its components in your research, please cit
 - Add a second LLM judge (GPT-4-class) to cross-check `bio-rag-eval` scores and report inter-judge agreement
 - Expand pathway coverage in `g2p-rag` to include WikiPathways and a curated subset of SIGNOR
 - Multi-step agent traces: let `therapy-agent` issue follow-up retrieval calls instead of one-shot reasoning
-- A web UI (deployed via the included `docker-compose.yml`) for interactively browsing cases and scores
+- A web UI for interactively browsing cases and scores, and the Claude-path scorecard side-by-side with the Llama-path scorecard
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a deeper component-by-component explanation.
 
