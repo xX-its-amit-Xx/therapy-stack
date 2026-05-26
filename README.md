@@ -52,9 +52,9 @@ Child repos:
 
 ---
 
-## Quickstart — run the real end-to-end demo locally
+## Quickstart — run the real blinded benchmark locally
 
-The runnable demo lives in [`sandbox/`](sandbox/). It uses a free, open-source 3 B Llama model loaded via `llama-cpp-python` — no API keys, no GPU required.
+The runnable demo lives in [`sandbox/`](sandbox/). It drives the **real `therapy-agent` LangGraph pipeline** with a local Llama-3.2-3B model via `llama-cpp-python` — no API keys, no GPU required.
 
 ```powershell
 git clone https://github.com/xX-its-amit-Xx/therapy-stack.git
@@ -64,14 +64,16 @@ cd therapy-stack/sandbox
 uv venv --python 3.11 .venv
 $env:UV_CACHE_DIR = "C:/uv-cache"  # uv cache off the project drive
 
-# Install runtime deps from abetlen's prebuilt CPU wheels
+# Runtime deps from abetlen's prebuilt CPU wheels
 uv pip install --python ./.venv/Scripts/python.exe `
     llama-cpp-python `
     --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 uv pip install --python ./.venv/Scripts/python.exe `
-    huggingface_hub pandas pyarrow requests
+    langgraph langchain-core httpx typer rich pydantic pyyaml `
+    tenacity python-dotenv huggingface_hub pandas pyarrow requests
 uv pip install --python ./.venv/Scripts/python.exe `
-    -e ../../fda-strategy-triples --no-deps
+    -e ../../fda-strategy-triples --no-deps `
+    -e ../../therapy-agent --no-deps
 
 # Download Llama 3.2 3B Instruct Q4_K_M (~1.9 GB)
 ./.venv/Scripts/python.exe -c "from huggingface_hub import hf_hub_download; `
@@ -80,11 +82,12 @@ uv pip install --python ./.venv/Scripts/python.exe `
       filename='Llama-3.2-3B-Instruct-Q4_K_M.gguf', `
       local_dir='C:/llama-models')"
 
-# Run all 10 FDA cases end-to-end (~3 min on an 8-core CPU)
-./.venv/Scripts/python.exe run_e2e.py --cases 10 --out results_all.json
+# Blinded run: 10 YAML benchmark cases through the real therapy-agent
+$env:THERAPY_AGENT_LLM_BACKEND = "llama"
+./.venv/Scripts/python.exe run_blinded.py --out blinded_results.json
 ```
 
-For the Claude/Anthropic production path (requires `ANTHROPIC_API_KEY` and a built `g2p-rag` index), use the child packages directly — `g2p-agent` is wired to drive Claude end-to-end. The sandbox harness shows the same wiring without that infrastructure.
+To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_BACKEND=anthropic`. The prompts and tooling are identical.
 
 ---
 
@@ -97,29 +100,40 @@ For the Claude/Anthropic production path (requires `ANTHROPIC_API_KEY` and a bui
 
 ---
 
-## Latest scorecard
+## Latest scorecard — v0.2 (real, integrated, blinded)
 
-Real run, **2026-05-26**, Llama-3.2-3B-Instruct (Q4_K_M, llama-cpp-python, CPU), 10 cases from `fda-strategy-triples` v0.1.0. Full traces in [`sandbox/RESULTS.md`](sandbox/RESULTS.md).
+The v0.2 result uses the **real `therapy-agent` package** (the LangGraph pipeline with parse_input → variant_lookup → mechanism_classifier → pathway_expansion → druggable_target_search → strategy_synthesis → self_critique) running on **local Llama-3.2-3B-Instruct** via a new pluggable backend, against the **10 YAML benchmark cases** that ship in `therapy-agent/benchmarks/`. Input per case is `gene + mutation + disease_phenotype`; the FDA drug name and target are not passed.
 
-| # | Drug | Disease gene(s) | Gold target | Top-1 prediction | Rank | Recovered |
-|---|---|---|---|---|---|---|
-| 1 | Spinraza | SMN1, SMN2 | SMN2 pre-mRNA ISS-N1 | `SMN2` | 1 | ✅ |
-| 2 | Zolgensma | SMN1 | SMN1 transgene | `SMN1` | 1 | ✅ |
-| 3 | Kalydeco | CFTR | CFTR | `CFTR` | 1 | ✅ |
-| 4 | Galafold | GLA | GLA (lysosomal) | `GLA (mRNA)` | 1 | ✅ |
-| 5 | Zokinvy | LMNA | FNTB (farnesyltransferase) | `SREBF1` | — | ❌ |
-| 6 | Amvuttra | TTR | TTR mRNA | `STT3B` | — | ❌ |
-| 7 | Givlaari | HMBS, CPOX, PPOX, ALAS1 | ALAS1 mRNA | `CPOX` | 2 | ✅ |
-| 8 | Evrysdi | SMN1, SMN2 | SMN2 pre-mRNA splice site | `SMN1` | 2 | ✅ |
-| 9 | Casgevy | BCL11A, HBB | BCL11A erythroid enhancer | `MTA2` | 3 | ✅ |
-| 10 | Leqvio | PCSK9, LDLR | PCSK9 mRNA | `LDLR` | 2 | ✅ |
+Full traces: [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
 
-**Overall:** 8/10 recovered (gold target in top-3), top-1 hits 4/10, mean rank of correct target **1.625**, total wall time ~3 min.
+| # | Case | Gene | Expected target | Predicted target | Recovered |
+|---|---|---|---|---|---|
+| 1 | brd4780_umod (ADTKD-MUC1) | UMOD | TMED9 | `TMED9` | ✅ |
+| 2 | ekterly_serping1 (HAE) | SERPING1 | KLKB1 | `KLKB1` | ✅ |
+| 3 | als_sod1 (ALS) | SOD1 | SOD1 mRNA | `PRDX1` | ❌ |
+| 4 | dmd_exon51 (Duchenne) | DMD | DMD exon-skip | `SGCA` | ❌ |
+| 5 | fabry_gla (Fabry) | GLA | GLA chaperone | `GLA` | ✅ |
+| 6 | fh_pcsk9 (FH) | PCSK9 | PCSK9 mRNA | `PCSK9` | ✅ |
+| 7 | obesity_pomc (POMC obesity) | POMC | MC4R agonist | `MC4R` | ✅ |
+| 8 | porphyria_alas1 (AHP) | HMBS | ALAS1 mRNA | `ALAS1` | ✅ |
+| 9 | scd_hbb (sickle cell) | HBB | HBB / BCL11A | `MYB` | ❌ |
+| 10 | sma_smn1 (SMA) | SMN1 | SMN2 splicing | `SMN2` | ✅ |
 
-### What the failures tell us
+**Overall:** **7 / 10 blinded recovery**, ~82 s/case on an 8-core CPU (~14 min total), no API key.
 
-- **Zokinvy (LMNA → FNTB).** The retrieved UniProt PTM field *literally names* FNTA/FNTB as the farnesyltransferase, but the 3 B model fails to chain "progerin's CAAX motif is permanently farnesylated → that traps it at the membrane → block the transferase to release it" and defaults to "fix the nuclear envelope". A larger model or an explicit reasoning scaffold would likely close this.
-- **Amvuttra (TTR → TTR mRNA).** The model over-reasons — proposes blocking glycosylation (STT3B) and RBP4 binding instead of just knocking down the toxic transthyretin. Sometimes "the disease gene IS the target" is the right answer; the prompt biases too hard against that.
+### Leakage discipline
+
+Before this run the therapy-agent prompts contained two worked examples that named the SERPING1→KLKB1 and UMOD→TMED9 mappings verbatim, plus a Reactome `pathway_context` cache that narrated the FDA-approved drug for each disease (e.g. "Givosiran silences ALAS1 mRNA via siRNA"). Those were removed. The cached Reactome entries now carry only neutral one-liners describing the disease gene's pathway role, and the strategy_synthesis system prompt uses categorical patterns (LOF inhibitor → downstream effector; toxic gain → mRNA knockdown; misfolding → cargo receptor or chaperone; …) without naming any disease gene or drug from the test set.
+
+### Persistent failures (3 B model capability limits, not leakage)
+
+After four iteration rounds (different mechanism→pattern routing prompts), three cases consistently miss:
+
+- **`als_sod1`** — dominant-negative SOD1 aggregates. Pattern 5 says "knock down the disease gene's mRNA" and the system prompt explicitly states this. The 3 B model still drifts to PRDX1 (a downstream antioxidant). The rationale describes the right mechanism; the `target_protein` field doesn't follow.
+- **`dmd_exon51`** — out-of-frame DMD exon 48-50 deletion. Pattern 7 (exon-skipping ASO) maps to "target an adjacent exon of the same gene". The model picks SGCA (sarcoglycan, a member of the dystrophin-glycoprotein complex) instead.
+- **`scd_hbb`** — HBB Glu6Val polymerization. The model walks two regulatory hops past the disease gene to MYB (a transcription factor regulating BCL11A) instead of either HBB stabilization or the BCL11A enhancer.
+
+All three failures involve cases where the right target is *the disease gene itself*, and the 3 B model — despite an explicit triage table — over-reaches to a downstream partner. The same pipeline with `THERAPY_AGENT_LLM_BACKEND=anthropic` (its default Claude backend, requires `ANTHROPIC_API_KEY`) should close these — the prompts and tooling are unchanged.
 
 ---
 

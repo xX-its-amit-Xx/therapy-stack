@@ -17,6 +17,8 @@ sandbox/.venv/
 sandbox/models/
 sandbox/results_hard*.json
 sandbox/results_all.json
+sandbox/blinded_*.json
+sandbox/_gen_*.py
 
 # Local env.
 .env

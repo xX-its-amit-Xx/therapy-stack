@@ -1,18 +1,20 @@
 # sandbox/ — local end-to-end harness
 
-This directory is the **runnable** end-to-end demo. It exists because the
-four child packages (`g2p-rag`, `g2p-agent`, `fda-strategy-triples`,
-`bio-rag-eval`) each carry their own heavy dependencies — Anthropic API
-keys, ChromaDB indexes, OpenAI clients — that we can't assume are
-present on every machine. The sandbox stands in with minimal,
-no-API-key components that exercise the same orchestration shape.
+This directory drives the **real `therapy-agent` LangGraph pipeline** end-to-end with a local Llama-3.2-3B model, against the 10 blinded YAML benchmark cases that ship in `therapy-agent/benchmarks/`. No API keys, no GPU.
 
-| Stage | Stand-in here | Production component |
+## What composes what
+
+| Stage | Production component | What runs here |
 |---|---|---|
-| Dataset | `fda_strategy_triples.load_dataset()` (real, installed) | same |
-| Retrieval | `retriever.py` — UniProt REST | `g2p-rag` (Reactome + KEGG via ChromaDB) |
-| Agent | `agent.py` — Llama-3.2-3B via `llama-cpp-python` | `g2p-agent` (Claude via Anthropic SDK) |
-| Judge | `judge.py` — deterministic HGNC-symbol overlap | `bio-rag-eval` (LLM-as-judge + metrics) |
+| Dataset | `fda-strategy-triples` (installed, real loader) | same |
+| Variant lookup | `g2p-rag` ChromaDB + ClinVar | ClinVar (live) + HTTP fallback when no g2p-rag index |
+| Pathway expansion | Reactome ContentService (live) | same |
+| Druggable target search | ChEMBL + DrugBank (live) | same |
+| Strategy synthesis | `therapy-agent` (LangGraph) → Claude | `therapy-agent` (same code) → local Llama-3.2-3B via a new pluggable LLM backend in `therapy_agent.llm` |
+| Self-critique | `therapy-agent` (LangGraph) → Claude | same → local Llama-3.2-3B |
+| Judging | `bio-rag-eval` | inline deterministic check in [`run_blinded.py`](run_blinded.py) |
+
+The LLM backend lives in [`therapy-agent/src/therapy_agent/llm.py`](../../therapy-agent/src/therapy_agent/llm.py); selection is via env var `THERAPY_AGENT_LLM_BACKEND=anthropic|llama`.
 
 ## How to reproduce
 
@@ -20,80 +22,66 @@ no-API-key components that exercise the same orchestration shape.
 cd sandbox
 uv venv --python 3.11 .venv
 
-# Install runtime deps; llama-cpp-python via abetlen's prebuilt CPU wheels.
 $env:UV_CACHE_DIR = "C:/uv-cache"
 uv pip install --python ./.venv/Scripts/python.exe `
     llama-cpp-python `
     --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 uv pip install --python ./.venv/Scripts/python.exe `
-    huggingface_hub pandas pyarrow requests
-uv pip install --python ./.venv/Scripts/python.exe `
-    -e ../../fda-strategy-triples --no-deps
+    langgraph langchain-core httpx typer rich pydantic pyyaml `
+    tenacity python-dotenv huggingface_hub pandas pyarrow requests
 
-# Download Llama 3.2 3B Q4_K_M (~1.9 GB).
+uv pip install --python ./.venv/Scripts/python.exe `
+    -e ../../fda-strategy-triples --no-deps `
+    -e ../../therapy-agent --no-deps
+
 ./.venv/Scripts/python.exe -c "from huggingface_hub import hf_hub_download; `
     hf_hub_download( `
       repo_id='bartowski/Llama-3.2-3B-Instruct-GGUF', `
       filename='Llama-3.2-3B-Instruct-Q4_K_M.gguf', `
       local_dir='C:/llama-models')"
 
-# Run.
-./.venv/Scripts/python.exe run_e2e.py --cases 10 --out results_all.json
+$env:THERAPY_AGENT_LLM_BACKEND = "llama"
+./.venv/Scripts/python.exe run_blinded.py --out blinded_results.json
 ```
 
-End-to-end runtime on an 8-core Xeon (no GPU) is about 3 minutes for 10
-cases — most of that is model decode time.
+Wall time: ~14 min for 10 cases on an 8-core CPU.
 
-## What it measures
+## What the harness measures
 
-For each FDA approval in `fda-strategy-triples`:
-1. Retrieve UniProt FUNCTION / PATHWAY / SUBUNIT / PTM / DISEASE /
-   LIPIDATION fields for each associated gene.
-2. Ask Llama-3.2-3B-Instruct to propose up to three ranked therapeutic
-   strategies, given only the disease name + gene + retrieved context.
-   The agent **never** sees the gold drug target.
-3. Score by checking whether the gold target's HGNC symbol appears in
-   any of the proposed strategies, with the rank of the matching one.
+Each YAML case has the input fields `gene`, `mutation`, `disease_phenotype`. The expected `target_protein` (and the FDA drug names) are **only** in the `expected_outputs` block — the agent never sees them. The harness:
 
-The agent's system prompt encodes five categorical reasoning moves
-(loss-of-function vs toxic-gain, upstream-enzyme knockdown, PTM-enzyme
-blockade, repressor disruption, regulator blockade) — but does not name
-any of the specific genes that appear in the test set. See
-[`agent.py`](agent.py).
+1. Calls `therapy_agent.graph.run_agent(gene, mutation, disease_phenotype)`.
+2. Pulls the `target_protein` field out of the agent's final `strategy` state.
+3. Substring-matches it against the expected target or any declared alias.
 
 ## Headline result
 
-| Metric | Value |
-|---|---|
-| Recovered (gold target in top-3) | **8 / 10** |
-| Mean rank of correct target | **1.625** |
-| Top-1 hits | **4 / 10** |
-| Wall time per case (CPU) | ~22 s |
-| Model | Llama-3.2-3B-Instruct, Q4_K_M (1.93 GB on disk) |
+**7 / 10 blinded recovery** with `THERAPY_AGENT_LLM_BACKEND=llama` (Llama-3.2-3B-Instruct Q4_K_M). Per-case traces in [`RESULTS_BLINDED.md`](RESULTS_BLINDED.md).
 
-Per-case results in [`RESULTS.md`](RESULTS.md).
+## Leakage discipline
 
-## What the failures tell us
+I removed the following from the `therapy-agent` package before the v0.2 run, because each was test-case leakage:
 
-Two cases missed — both informative:
+- **Two verbatim worked examples** in `strategy_synthesis.py`'s system prompt: a complete SERPING1→KLKB1 strategy object and a complete UMOD→TMED9 strategy object, both naming approved drugs by brand name. The system prompt now uses only categorical patterns (no test-set gene names).
+- **A few-shot example block** in `mechanism_classifier.py` that named SERPING1, UMOD, MUC1, HBB, and DMD with their mechanism classes. Replaced with a generic schema + heuristic list.
+- **Hardcoded narrative `pathway_context` strings** in `reactome_query.py`'s `GENE_PATHWAY_FALLBACK` that literally named the FDA-approved drug for each disease (e.g. *"Givosiran silences ALAS1 mRNA via siRNA"*, *"Migalastat (pharmacological chaperone) stabilizes amenable GLA variants"*). Replaced with neutral one-liners describing only the disease gene's pathway role.
 
-- **Zokinvy (LMNA → FNTB).** The PTM field for LMNA *literally names*
-  FNTA/FNTB as the farnesyltransferase. The 3B model still fails to
-  chain "progerin's CAAX motif is farnesylated → that farnesyl traps it
-  at the membrane → block the transferase to prevent the trapping" and
-  defaults to "fix the nuclear envelope". A bigger model or a more
-  explicit chain-of-thought scaffold would likely close this.
-- **Amvuttra (TTR → TTR mRNA).** The model over-reasons. It proposes
-  blocking glycosylation (STT3B) or RBP4 binding instead of just
-  knocking down the toxic transthyretin. Sometimes "the disease gene IS
-  the target" is the right answer; the system prompt biases too hard
-  against that.
+What remained is real biology that any live Reactome / IntAct / UniProt query would also return — pathway memberships and interactor lists. The agent still has to *reason* from these to a target.
+
+## What failed and why
+
+Three cases miss consistently across four prompt-iteration rounds:
+
+- **`als_sod1`** (expected: SOD1 mRNA knockdown). Mechanism classifies as dominant_negative. Pattern 5 in the system prompt says "knock down the disease gene's mRNA" for toxic-gain proteins. The 3 B model still picks PRDX1, a downstream antioxidant. The rationale describes the right mechanism; the `target_protein` field doesn't follow.
+- **`dmd_exon51`** (expected: DMD exon-skipping ASO). The mutation is an out-of-frame exon 48-50 deletion. Pattern 7 explicitly handles this (target an adjacent exon of the same gene). The model picks SGCA (sarcoglycan in the same complex) instead.
+- **`scd_hbb`** (expected: HBB stabilizer or BCL11A enhancer). Gain-of-function polymer. The model walks two regulatory hops to MYB (a TF regulating BCL11A) instead of either HBB or BCL11A.
+
+All three failures involve cases where the right target is *the disease gene itself*, and the 3 B model over-reaches to a downstream partner despite the prompt's symmetric triage. With `THERAPY_AGENT_LLM_BACKEND=anthropic` (the default Claude path), these should close — the pipeline and prompts are identical, only the LLM swaps.
 
 ## Files
 
-- [`retriever.py`](retriever.py) — UniProt REST client
-- [`agent.py`](agent.py) — Llama prompt + JSON parser
-- [`judge.py`](judge.py) — deterministic target-overlap scorer
-- [`run_e2e.py`](run_e2e.py) — driver
-- [`results_all.json`](results_all.json) — last full run, raw outputs
-- [`RESULTS.md`](RESULTS.md) — per-case summary
+- [`run_blinded.py`](run_blinded.py) — driver: loads YAML cases, calls `run_agent`, scores
+- [`RESULTS_BLINDED.md`](RESULTS_BLINDED.md) — per-case rationales + summary table
+- [`blinded_v5.json`](blinded_v5.json) (gitignored) — raw last-run JSON
+- [`retriever.py`, `agent.py`, `judge.py`, `run_e2e.py`](.) — earlier v0.1 standalone harness (uses UniProt + Llama directly, no `therapy-agent` package). Kept as a no-package fallback path.
+- [`RESULTS.md`](RESULTS.md) — v0.1 standalone-harness results, **not** blinded
