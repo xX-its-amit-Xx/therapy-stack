@@ -100,40 +100,36 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — v0.2 (real, integrated, blinded)
+## Latest scorecard — v0.3 (truly blinded, leakage-stripped)
 
-The v0.2 result uses the **real `therapy-agent` package** (the LangGraph pipeline with parse_input → variant_lookup → mechanism_classifier → pathway_expansion → druggable_target_search → strategy_synthesis → self_critique) running on **local Llama-3.2-3B-Instruct** via a new pluggable backend, against the **10 YAML benchmark cases** that ship in `therapy-agent/benchmarks/`. Input per case is `gene + mutation + disease_phenotype`; the FDA drug name and target are not passed.
+The v0.2 number (7/10) was an artifact of three leakage paths in the agent's
+toolchain. After stripping them, the honest score on a 3 B Llama is **4 / 10
+— below the 6/10 trivial "predict-the-disease-gene" baseline**. Full
+audit and per-case rationales in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
 
-Full traces: [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
+| Metric | v0.3 (blinded) | v0.2 (leaky) |
+|---|---|---|
+| Target recovery | **4 / 10** (Wilson 95% CI 17-69%) | 7 / 10 |
+| Modality also correct | 2 / 10 | not measured |
+| Citation also correct | 4 / 10 | not measured |
+| Full (target + modality + citation) | **0 / 10** | not measured |
+| Baseline: always-predict-disease-gene | 6 / 10 | -- |
+| Baseline: first-Reactome-interactor | 6 / 10 | -- |
 
-| # | Case | Gene | Expected target | Predicted target | Recovered |
-|---|---|---|---|---|---|
-| 1 | brd4780_umod (ADTKD-MUC1) | UMOD | TMED9 | `TMED9` | ✅ |
-| 2 | ekterly_serping1 (HAE) | SERPING1 | KLKB1 | `KLKB1` | ✅ |
-| 3 | als_sod1 (ALS) | SOD1 | SOD1 mRNA | `PRDX1` | ❌ |
-| 4 | dmd_exon51 (Duchenne) | DMD | DMD exon-skip | `SGCA` | ❌ |
-| 5 | fabry_gla (Fabry) | GLA | GLA chaperone | `GLA` | ✅ |
-| 6 | fh_pcsk9 (FH) | PCSK9 | PCSK9 mRNA | `PCSK9` | ✅ |
-| 7 | obesity_pomc (POMC obesity) | POMC | MC4R agonist | `MC4R` | ✅ |
-| 8 | porphyria_alas1 (AHP) | HMBS | ALAS1 mRNA | `ALAS1` | ✅ |
-| 9 | scd_hbb (sickle cell) | HBB | HBB / BCL11A | `MYB` | ❌ |
-| 10 | sma_smn1 (SMA) | SMN1 | SMN2 splicing | `SMN2` | ✅ |
+### What changed (the actual leakage fixes)
 
-**Overall:** **7 / 10 blinded recovery**, ~82 s/case on an 8-core CPU (~14 min total), no API key.
+1. **`tools/drugbank_query.py`** was a hand-curated static dict mapping every benchmark gene to its FDA-approved drug name + mechanism string. That dict was JSON-serialized into the `strategy_synthesis` user prompt as "Approved drugs found: [...]" -- i.e. the agent saw the answer. Replaced with a coarse druggability flag (boolean) backed by a non-test-curated gene family list. No drug names returned.
+2. **`tools/reactome_query.py` `GENE_PATHWAY_FALLBACK`** had narrative `pathway_context` strings that named the FDA drug and strategy per case (e.g. *"Givosiran silences ALAS1 mRNA via siRNA"*). Narrative strings now neutral; interactor lists kept (those are real biology any live Reactome query would also return).
+3. **`nodes/druggable_target_search.py`** hardcoded `qc_genes = ["TMED9", "TMED2", "TMED10", ...]` when mechanism = misfolding -- hand-placing the BRD4780/UMOD answer into the candidate set. Removed.
+4. **`tools/chembl_query.py`** now filters by human SINGLE PROTEIN target type, returns only an active-compound count + druggability boolean (no specific compound names). Tenacity retries wired.
+5. **`tools/g2p_query.py`** was a stub that hit `localhost:8000` and returned empty when the (non-existent) server didn't respond. Replaced with a real UniProt REST retriever that returns g2p-style chunks (FUNCTION / PATHWAY / SUBUNIT / PTM / LIPIDATION / DISEASE). **g2p-style biology now actually flows into `variant_lookup_node` even without a built ChromaDB index.**
+6. **`tools/clinvar_query.py`** previously imported `tenacity` but never applied the decorator. Now properly retries on transient `httpx.HTTPError`.
 
-### Leakage discipline
+### What the post-fix numbers mean
 
-Before this run the therapy-agent prompts contained two worked examples that named the SERPING1→KLKB1 and UMOD→TMED9 mappings verbatim, plus a Reactome `pathway_context` cache that narrated the FDA-approved drug for each disease (e.g. "Givosiran silences ALAS1 mRNA via siRNA"). Those were removed. The cached Reactome entries now carry only neutral one-liners describing the disease gene's pathway role, and the strategy_synthesis system prompt uses categorical patterns (LOF inhibitor → downstream effector; toxic gain → mRNA knockdown; misfolding → cargo receptor or chaperone; …) without naming any disease gene or drug from the test set.
+The agent now genuinely under-performs the disease-gene baseline. It gets two cases the baseline misses (BRD4780/UMOD -> TMED9, POMC -> MC4R -- both real reasoning from g2p-rag chunks), but over-reasons past the right answer on five cases where the FDA target *is* the disease gene (Fabry/GLA, porphyria, ALS-SOD1, SMA, DMD). Those are 3 B-attention failures: the model picks a plausible adjacent protein (CCS for SOD1, UTRN for DMD, NPC1 for Fabry, HMBS for porphyria, GEMIN3 for SMN1) instead of holding on the disease gene itself.
 
-### Persistent failures (3 B model capability limits, not leakage)
-
-After four iteration rounds (different mechanism→pattern routing prompts), three cases consistently miss:
-
-- **`als_sod1`** — dominant-negative SOD1 aggregates. Pattern 5 says "knock down the disease gene's mRNA" and the system prompt explicitly states this. The 3 B model still drifts to PRDX1 (a downstream antioxidant). The rationale describes the right mechanism; the `target_protein` field doesn't follow.
-- **`dmd_exon51`** — out-of-frame DMD exon 48-50 deletion. Pattern 7 (exon-skipping ASO) maps to "target an adjacent exon of the same gene". The model picks SGCA (sarcoglycan, a member of the dystrophin-glycoprotein complex) instead.
-- **`scd_hbb`** — HBB Glu6Val polymerization. The model walks two regulatory hops past the disease gene to MYB (a transcription factor regulating BCL11A) instead of either HBB stabilization or the BCL11A enhancer.
-
-All three failures involve cases where the right target is *the disease gene itself*, and the 3 B model — despite an explicit triage table — over-reaches to a downstream partner. The same pipeline with `THERAPY_AGENT_LLM_BACKEND=anthropic` (its default Claude backend, requires `ANTHROPIC_API_KEY`) should close these — the prompts and tooling are unchanged.
+The v0.2 7/10 was the agent copying the answer out of the curated DrugBank stub. The v0.3 4/10 is the agent's actual reasoning capability under a 3 B Llama. With `THERAPY_AGENT_LLM_BACKEND=anthropic` the prompts and tools are unchanged; the expectation (untested in this work) is higher recovery from the larger model.
 
 ---
 

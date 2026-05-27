@@ -39,6 +39,16 @@ class CaseScore:
 _UPROT_PAREN = re.compile(r"\([A-Z][0-9][A-Z0-9]{3}[0-9]\)")
 _NONWORD = re.compile(r"[^a-z0-9 ]+")
 
+# Common ALL-CAPS tokens that look like HGNC symbols but aren't. Excluding
+# these keeps the matcher from scoring a recovery when both expected and
+# predicted strings happen to mention generic abbreviations like "RNA"
+# or delivery-vector names like "AAV9".
+_NON_HGNC_BLOCKLIST = {
+    "DNA", "RNA", "MRNA", "MIRNA", "SIRNA", "ASO", "PMO", "ATP", "GTP",
+    "ADP", "GDP", "CAMP", "AAV", "AAV9", "LNP", "GALNAC", "PCR", "PNS",
+    "CNS", "UPR", "ER", "GOLGI", "CAAX", "RT", "PTM", "PK", "PD", "FDA",
+}
+
 
 def _norm(s: str) -> str:
     s = s.lower()
@@ -47,19 +57,14 @@ def _norm(s: str) -> str:
     return " ".join(s.split())
 
 
-def _gold_tokens(gold: str) -> set[str]:
-    """Extract identifying tokens from the gold target string.
+def _symbols(text: str) -> set[str]:
+    raw = set(re.findall(r"\b[A-Z][A-Z0-9]{1,9}\b", text or ""))
+    return {s for s in raw if s not in _NON_HGNC_BLOCKLIST}
 
-    Examples:
-      "P53779 (PCSK9) -- proprotein convertase subtilisin/kexin type 9 mRNA"
-        -> {"pcsk9", "proprotein", "convertase", ...}
-      "BCL11A erythroid enhancer (chr2:...) -- transcriptional repressor of
-       fetal hemoglobin"
-        -> {"bcl11a", "erythroid", "enhancer", "fetal", "hemoglobin", ...}
-    """
+
+def _gold_tokens(gold: str) -> set[str]:
     norm = _norm(gold)
-    # Pull out HGNC-like all-caps symbols from the *original* string too.
-    symbols = set(re.findall(r"\b[A-Z][A-Z0-9]{1,9}\b", gold))
+    symbols = _symbols(gold)
     return set(norm.split()) | {s.lower() for s in symbols}
 
 
@@ -67,15 +72,11 @@ def _is_match(predicted: str, gold_tokens: set[str], gold_symbols: set[str]) -> 
     if not predicted:
         return False
     pred_norm_tokens = set(_norm(predicted).split())
-    # Pull HGNC-shaped symbols out of the prediction.
-    pred_symbols = {s.lower() for s in re.findall(r"\b[A-Z][A-Z0-9]{1,9}\b", predicted)}
+    pred_symbols = {s.lower() for s in _symbols(predicted)}
 
-    # A hit on an HGNC symbol is the strongest signal — that's our primary criterion.
     if pred_symbols & gold_symbols:
         return True
 
-    # Otherwise require at least two content-word tokens in common AND not
-    # just generic "mrna" / "protein" filler.
     filler = {"mrna", "protein", "gene", "the", "a", "an", "of", "and",
               "for", "to", "in", "is", "with", "via"}
     overlap = (pred_norm_tokens & gold_tokens) - filler
@@ -85,7 +86,7 @@ def _is_match(predicted: str, gold_tokens: set[str], gold_symbols: set[str]) -> 
 def score(case_id: str, disease: str, causal_gene: str, gold_target: str,
           strategies: list[Strategy]) -> CaseScore:
     gold_tokens = _gold_tokens(gold_target)
-    gold_symbols = {s.lower() for s in re.findall(r"\b[A-Z][A-Z0-9]{1,9}\b", gold_target)}
+    gold_symbols = {s.lower() for s in _symbols(gold_target)}
 
     rank: int | None = None
     for i, s in enumerate(strategies, start=1):
