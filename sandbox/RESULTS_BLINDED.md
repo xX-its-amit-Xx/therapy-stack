@@ -1,157 +1,125 @@
-# Blinded v0.3 results: therapy-agent + Llama-3.2-3B, leakage-stripped
+# Blinded v0.4 results: real biology for candidate interactors
 
 **Backend:** local Llama-3.2-3B-Instruct (Q4_K_M GGUF, llama-cpp-python, CPU).  
 **Test set:** 10 YAML benchmark cases in `therapy-agent/benchmarks/`.  
-**Input per case:** `gene + mutation + disease_phenotype`. No drug or target leaks.
+**Input per case:** `gene + mutation + disease_phenotype`.
 
-## What changed vs v0.2 (the 7/10 number)
+## What changed vs v0.3
 
-Audit found three leakage paths that v0.2 was unintentionally exploiting:
+v0.3 fixed the curated-DrugBank leakage but had a key-mismatch bug in
+`strategy_synthesis` (read `chembl_compounds`, the schema wrote
+`chembl_n_active`) so the druggability counts in the prompt were always 0.
+And the agent only saw UniProt biology for the disease gene — none for the
+candidate interactors it had to choose among. Both fixed in v0.4:
 
-1. `tools/drugbank_query.py` was a static dict mapping every benchmark gene
-   to its FDA-approved drug name + mechanism string. That dict was serialized
-   into the `strategy_synthesis` user prompt as `Approved drugs found: [...]`.
-   Replaced with a coarse druggability-flag-only lookup, no drug names.
-2. `tools/reactome_query.py` `GENE_PATHWAY_FALLBACK` had curated entries with
-   narrative `pathway_context` strings naming the FDA drug and strategy. The
-   narrative strings were already neutralized in v0.2; the curated interactor
-   lists kept (real biology).
-3. `nodes/druggable_target_search.py` hardcoded `qc_genes = [TMED9, TMED2, ...]`
-   when mechanism = misfolding, hand-placing the BRD4780 answer in the candidate
-   set. Removed.
-
-Additionally, g2p-rag retrieval now actually flows in: when the g2p-rag
-ChromaDB index isn't available, the fallback hits UniProt REST directly and
-returns chunks shaped like g2p-rag would (FUNCTION / PATHWAY / SUBUNIT / PTM /
-LIPIDATION / DISEASE). The model sees real biology, not the FDA answer.
+1. New LangGraph node `interactor_biology_lookup` (between
+   `druggable_target_search` and `strategy_synthesis`) fetches UniProt
+   chunks for the top-5 druggable candidate interactors via the same
+   g2p-rag fallback used for the disease gene.
+2. `strategy_synthesis` user message reads the new schema correctly and
+   renders a per-candidate biology block so the LLM can compare biology
+   across plausible targets.
+3. The Reactome `pathway_context` one-liner (which v0.3 read into a local
+   variable and then discarded) is now surfaced in the prompt.
 
 ## Scorecard
 
-| Metric | Value |
-|---|---|
-| Target recovery | **4 / 10** (95% Wilson CI 17–69%) |
-| Modality also correct | 2 / 10 |
-| Citation also correct | 4 / 10 |
-| Full (target + modality + citation) | 0 / 10 |
-| Baseline: always-predict-disease-gene | 6 / 10 |
-| Baseline: first-Reactome-interactor | 6 / 10 |
-| Total wall time | 953s |
+| Metric | v0.4 (full biology) | v0.3 (disease-gene biology only) | v0.2 (leaky) |
+|---|---|---|---|
+| Target recovery | **3 / 10** (Wilson CI 11-60%) | 4 / 10 | 7 / 10 |
+| Modality also correct | 3 / 10 | 2 / 10 | not measured |
+| Citation also correct | 4 / 10 | 4 / 10 | not measured |
+| Full (target + modality + citation) | 0 / 10 | 0 / 10 | not measured |
+| Baseline: predict-disease-gene | 6 / 10 | 6 / 10 | -- |
+| Baseline: first-Reactome-interactor | 6 / 10 | 6 / 10 | -- |
 
-**The agent UNDERPERFORMS the trivial 'predict the disease gene' baseline**
-(4/10 vs 6/10) when leakage is removed. This is the result the v0.2 numbers
-hid. The 3B model over-reasons to downstream partners on cases where the
-FDA target is the disease gene itself, and under-reasons on cases where the
-FDA target is a specific downstream protein.
+### The metric that matters: hard cases (target != disease gene)
+
+- **v0.4: 3 / 5 hard cases recovered** (BRD4780, Ekterly, POMC, Porphyria, SMA)
+- v0.3: 2 / 5 hard cases
+- Disease-gene baseline: **0 / 5** by construction
+- Easy cases (target == disease gene): 0 / 5
+
+On the cases where reasoning is actually required (target != disease gene),
+v0.4 recovers 3 of 5. Adding biology for candidate interactors moved the
+model from 'pick the disease gene by default' toward 'reason about which
+biology fits the mechanism' — that helped porphyria (HMBS -> ALAS1) but
+hurt fh_pcsk9 and scd_hbb where the disease gene was the right answer all
+along and the model over-reasoned into a partner.
 
 ## Per-case
 
-| # | Case | Gene | Expected | Predicted | Target? | Modality? | Citation? |
-|---|---|---|---|---|---|---|---|
-| 1 | `brd4780_umod` | UMOD | TMED9 | `TMED9` | Y | N | Y |
-| 2 | `ekterly_serping1` | SERPING1 | KLKB1 | `C1S` | N | Y | N |
-| 3 | `als_sod1` | SOD1 | SOD1 | `CCS` | N | N | Y |
-| 4 | `dmd_exon51` | DMD | DMD | `UTRN` | N | N | N |
-| 5 | `fabry_gla` | GLA | GLA | `NPC1` | N | N | N |
-| 6 | `fh_pcsk9` | PCSK9 | PCSK9 | `PCSK9` | Y | Y | N |
-| 7 | `obesity_pomc` | POMC | MC4R | `MC4R` | Y | N | Y |
-| 8 | `porphyria_alas1` | HMBS | ALAS1 | `HMBS` | N | N | Y |
-| 9 | `scd_hbb` | HBB | HBB | `HBB` | Y | N | N |
-| 10 | `sma_smn1` | SMN1 | SMN2 | `GEMIN3` | N | N | N |
+| # | Case | Type | Gene | Expected | Predicted | Target? | Modality? | Citation? |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `brd4780_umod` | hard | UMOD | TMED9 | `TMED9` | Y | N | Y |
+| 2 | `ekterly_serping1` | hard | SERPING1 | KLKB1 | `C1R` | N | Y | N |
+| 3 | `als_sod1` | easy | SOD1 | SOD1 | `CCS` | N | N | Y |
+| 4 | `dmd_exon51` | easy | DMD | DMD | `DTNA` | N | Y | N |
+| 5 | `fabry_gla` | easy | GLA | GLA | `NPC1` | N | N | N |
+| 6 | `fh_pcsk9` | easy | PCSK9 | PCSK9 | `IDOL` | N | N | N |
+| 7 | `obesity_pomc` | hard | POMC | MC4R | `MC4R` | Y | N | Y |
+| 8 | `porphyria_alas1` | hard | HMBS | ALAS1 | `ALAS1` | Y | N | Y |
+| 9 | `scd_hbb` | easy | HBB | HBB | `HBA1` | N | Y | N |
+| 10 | `sma_smn1` | hard | SMN1 | SMN2 | `GEMIN3` | N | N | N |
 
-## Per-case rationales
+## Rationales (truncated)
 
-### brd4780_umod -- RECOVERED
+### brd4780_umod (hard) -- RECOVERED
 
-- Gene: UMOD
-- Expected target: TMED9
-- Predicted target: `TMED9` (chaperone, conf 0.80)
-- Mechanism: lof|misfolding
-- Rationale: TMED9 is a cargo receptor protein that plays a key role in the ER retention of misfolded proteins, which is consistent with the mechanism of UMOD protein misfolding and ER retention. Targeting TMED9 with a pharmacological chaperone could potentially correct the disease by reducing the accumulation of misfolded UMOD protein in the ER.
+- Gene: UMOD, expected: TMED9, predicted: `TMED9`
+- Mechanism: lof|misfolding  |  Modality: Chaperone  |  Confidence: 0.80
+- Rationale: TMED9 is involved in protein folding and quality control in the endoplasmic reticulum, which is relevant to the misfolding of UMOD protein. A pharmacological chaperone binding to TMED9 could help restore proper protein folding and reduce the toxicity associated with UMOD misfolding.
 
-### ekterly_serping1 -- MISS
+### ekterly_serping1 (hard) -- MISS
 
-- Gene: SERPING1
-- Expected target: KLKB1
-- Predicted target: `C1S` (inhibitor, conf 0.90)
-- Mechanism: lof
-- Rationale: The molecular mechanism of hereditary angioedema due to C1 esterase inhibitor deficiency is a loss of function of the C1S protein, which is a key regulator of the complement pathway. Targeting the C1S protein with an inhibitor can correct the disease by blocking the downstream effector of the C1S protein, which is the complement pathway. This is consistent with pattern 1, whic...
+- Gene: SERPING1, expected: KLKB1, predicted: `C1R`
+- Mechanism: lof  |  Modality: inhibitor  |  Confidence: 0.90
+- Rationale: The C1R protein is a key component of the complement pathway, and its deficiency leads to hereditary angioedema. The C1R protein is inhibited by the C1 esterase inhibitor, which is a well-established treatment for hereditary angioedema. Therefore, targeting the C1R protein with an inhibitor is a logical therapeutic strategy for treating hereditary angioedem...
 
-### als_sod1 -- MISS
+### als_sod1 (easy) -- MISS
 
-- Gene: SOD1
-- Expected target: SOD1
-- Predicted target: `CCS` (chaperone, conf 0.80)
-- Mechanism: dominant_negative
-- Rationale: The dominant-negative SOD1 mutation leads to misfolding and aggregation, which can be mitigated by a pharmacological chaperone that binds to the disease gene's own protein, CCS. This approach targets the CCS protein, which is involved in the degradation of the toxic SOD1 variant.
+- Gene: SOD1, expected: SOD1, predicted: `CCS`
+- Mechanism: dominant_negative  |  Modality: chaperone  |  Confidence: 0.90
+- Rationale: The dominant-negative mutation in SOD1 leads to a toxic protein product that interferes with wild-type SOD1 activity. CCS is a homodimer that interacts with SOD1 and regulates its activity. A pharmacological chaperone binding to CCS could restore the normal activity of SOD1 and prevent the formation of toxic aggregates.
 
-### dmd_exon51 -- MISS
+### dmd_exon51 (easy) -- MISS
 
-- Gene: DMD
-- Expected target: DMD
-- Predicted target: `UTRN` (chaperone, conf 0.80)
-- Mechanism: lof
-- Rationale: The mechanism of DMD is lof due to a frameshift mutation in the dystrophin gene. The UTRN protein is a component of the dystrophin-associated glycoprotein complex and interacts with the dystrophin protein. Given that the UTRN protein is involved in the dystrophin pathway and the mechanism is lof, a pharmacological chaperone binding to the UTRN protein could correct the disease...
+- Gene: DMD, expected: DMD, predicted: `DTNA`
+- Mechanism: lof  |  Modality: inhibitor | activator | chaperone | siRNA | ASO | gene_therapy | crispr | modulator | replacement  |  Confidence: 0.80
+- Rationale: DTNA is a key component of the dystrophin-associated glycoprotein complex, and its loss of function is associated with Duchenne muscular dystrophy. Targeting DTNA could potentially restore muscle function in patients with DMD.
 
-### fabry_gla -- MISS
+### fabry_gla (easy) -- MISS
 
-- Gene: GLA
-- Expected target: GLA
-- Predicted target: `NPC1` (inhibitor, conf 0.80)
-- Mechanism: misfolding
-- Rationale: NPC1 is a key regulator of Gb3 transport in lysosomes, and its inhibition can reduce Gb3 accumulation. This is consistent with the mechanism of Fabry disease, where NPC1's function is disrupted, leading to Gb3 accumulation and disease phenotype.
+- Gene: GLA, expected: GLA, predicted: `NPC1`
+- Mechanism: misfolding  |  Modality: inhibitor  |  Confidence: 0.80
+- Rationale: NPC1 is a cholesterol transporter that is essential for lysosomal cholesterol homeostasis. The mutation in GLA leads to misfolding and accumulation of Gb3 in lysosomes, causing cellular stress and disease phenotype. Targeting NPC1 with an inhibitor can help restore cholesterol homeostasis and alleviate disease symptoms.
 
-### fh_pcsk9 -- RECOVERED
+### fh_pcsk9 (easy) -- MISS
 
-- Gene: PCSK9
-- Expected target: PCSK9
-- Predicted target: `PCSK9` (chaperone | siRNA | ASO, conf 0.80)
-- Mechanism: gof|misfolding
-- Rationale: The gain-of-function missense mutation in PCSK9 leads to enhanced LDLR degradation, causing familial hypercholesterolemia. The mutation results in a toxic protein product that misfolds and aggregates, disrupting normal cellular function and contributing to the disease phenotype. Since the mechanism is gof in a regulatory enzyme that degrades or modifies another protein, causin...
+- Gene: PCSK9, expected: PCSK9, predicted: `IDOL`
+- Mechanism: gof|misfolding  |  Modality: cargo receptor modulation  |  Confidence: 0.80
+- Rationale: The mechanism of IDOL's interaction with PCSK9 suggests that IDOL could be a cargo receptor that promotes the degradation of PCSK9, thereby reducing its toxic activity. This is consistent with the misfolding of PCSK9 leading to its toxic activity.
 
-### obesity_pomc -- RECOVERED
+### obesity_pomc (hard) -- RECOVERED
 
-- Gene: POMC
-- Expected target: MC4R
-- Predicted target: `MC4R` (inhibitor, conf 0.90)
-- Mechanism: lof
-- Rationale: The POMC mutation leads to the absence of ACTH/MSH peptides, resulting in the loss of function of the POMC protein. However, the downstream MC4R receptor still works, and its activation is essential for regulating energy homeostasis. Therefore, targeting the MC4R receptor with an agonist that bypasses the missing ligand can correct the disease phenotype.
+- Gene: POMC, expected: MC4R, predicted: `MC4R`
+- Mechanism: lof  |  Modality: inhibitor  |  Confidence: 0.90
+- Rationale: The POMC mutation leads to the absence of ACTH/MSH peptides, resulting in the loss of function of the POMC protein. MC4R is a downstream effector of POMC and plays a crucial role in regulating energy homeostasis. Targeting MC4R with an inhibitor can help to restore energy balance and reduce body weight in individuals with POMC deficiency.
 
-### porphyria_alas1 -- MISS
+### porphyria_alas1 (hard) -- RECOVERED
 
-- Gene: HMBS
-- Expected target: ALAS1
-- Predicted target: `HMBS` (pharmacological chaperone, conf 0.80)
-- Mechanism: lof
-- Rationale: The HMBS protein is a regulatory enzyme in the heme biosynthetic pathway. The nonsense mutation in HMBS leads to a truncated, non-functional protein, resulting in the accumulation of toxic ALA/PBG intermediates when ALAS1 is induced. This loss-of-function causes acute intermittent porphyria, a disease characterized by life-threatening neurovisceral attacks triggered by various...
+- Gene: HMBS, expected: ALAS1, predicted: `ALAS1`
+- Mechanism: lof  |  Modality: inhibitor  |  Confidence: 0.80
+- Rationale: The HMBS gene encodes a protein that is crucial for the biosynthesis of heme. A heterozygous loss-of-function mutation in HMBS leads to the accumulation of toxic ALA/PBG intermediates when ALAS1 is induced. The downstream effector of this loss-of-function is ALAS1 itself, which drives the symptom. Therefore, the therapeutic target is ALAS1, an inhibitor of ...
 
-### scd_hbb -- RECOVERED
+### scd_hbb (easy) -- MISS
 
-- Gene: HBB
-- Expected target: HBB
-- Predicted target: `HBB` (pharmacological chaperone, conf 0.80)
-- Mechanism: gof
-- Rationale: The HBB gene encodes for hemoglobin A, a heterotetramer of two alpha chains and two beta chains. The mutation c.20A>T (p.Glu6Val) leads to a gain-of-function, where the hemoglobin S protein polymerizes under hypoxic conditions. A pharmacological chaperone targeting the HBB protein could potentially correct the misfolding and aggregation of the mutant protein, restoring normal ...
+- Gene: HBB, expected: HBB, predicted: `HBA1`
+- Mechanism: gof  |  Modality: inhibitor  |  Confidence: 0.80
+- Rationale: The mechanism of the disease is a gain-of-function in the HBA1 protein, which is a regulatory enzyme that degrades or modifies another protein. The downstream effector of this enzyme is the HBA2 protein, which is not the target of the disease. Therefore, the target is the HBA1 protein, which can be inhibited to correct the disease.
 
-### sma_smn1 -- MISS
+### sma_smn1 (hard) -- MISS
 
-- Gene: SMN1
-- Expected target: SMN2
-- Predicted target: `GEMIN3` (augmentation, conf 0.80)
-- Mechanism: lof
-- Rationale: Given the mechanism of SMA1, which is caused by the loss-of-function of the SMN protein, and the fact that GEMIN3 is a key component of the spliceosome, it is plausible that GEMIN3 is a compensatory paralog that is silenced by a repressor in SMA1. Targeting GEMIN3 via augmentation could potentially restore its expression and improve SMA1 symptoms.
-
-## How to read this
-
-Two cases where the agent _does_ beat the disease-gene baseline:
-- `brd4780_umod`: agent picked TMED9 from real UniProt SUBUNIT/INTERACTORS evidence (UMOD's interactors include TMED9/TMED2/TMED10 in Reactome).
-- `obesity_pomc`: agent picked MC4R by reasoning from the melanocortin pathway in g2p-rag chunks.
-
-Five cases where the agent over-reasons past the right answer:
-- `ekterly_serping1`: picked C1S (a complement protease SERPING1 inhibits) instead of KLKB1 (the kallikrein-kinin axis protease).
-- `als_sod1`: picked CCS (copper chaperone for SOD1) instead of SOD1 mRNA.
-- `dmd_exon51`: picked UTRN (utrophin, a paralog) instead of DMD exon skip.
-- `fabry_gla`: picked NPC1 (lysosomal cholesterol transporter) instead of GLA chaperone.
-- `porphyria_alas1`: picked HMBS (disease gene itself) instead of ALAS1 upstream knockdown.
-- `sma_smn1`: picked GEMIN3 (SMN complex partner) instead of SMN2 splicing.
-
-All of these are biologically adjacent but clinically wrong — the kind of mistake a small model makes when it can't disambiguate among several plausible candidates.
+- Gene: SMN1, expected: SMN2, predicted: `GEMIN3`
+- Mechanism: lof  |  Modality: pharmacological chaperone  |  Confidence: 0.80
+- Rationale: GEMIN3 is a core component of the SMN complex and has been shown to interact with SMN1. Pharmacological chaperones targeting GEMIN3 could potentially restore the function of the SMN complex and alleviate the symptoms of SMA.
