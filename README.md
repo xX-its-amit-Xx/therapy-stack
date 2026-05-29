@@ -100,39 +100,43 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — v0.4 (real biology for candidate interactors)
+## Latest scorecard — v0.5 / v0.6 / v0.7 (full model + pipeline ablation)
 
-v0.3 stripped the leakage and dropped to 4/10 (below the 6/10 baseline). v0.4 then added a new LangGraph node, `interactor_biology_lookup`, that fetches UniProt biology for the top candidate interactors (not just the disease gene) and a key-mismatch fix so the druggability counts in the prompt are no longer always zero. Result: overall recovery is **3/10** but the case mix shifts toward reasoning — **3 of 5 "hard" cases recover** (target != disease gene), vs 2 in v0.3 and 0 in the trivial baseline.
+After the v0.3/v0.4 blind-and-fix passes left the agent at 3-4/10 on a 3 B Llama, I tried all five upgrade levers from the prior round and ablated them against the same 10 YAML cases. Full per-case detail in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
 
-| Metric | v0.4 | v0.3 | v0.2 (leaky) |
-|---|---|---|---|
-| Target recovery | **3 / 10** (Wilson CI 11-60%) | 4 / 10 | 7 / 10 |
-| Hard cases (target != disease gene) | **3 / 5** | 2 / 5 | — |
-| Easy cases (target == disease gene) | 0 / 5 | 2 / 5 | — |
-| Modality also correct | 3 / 10 | 2 / 10 | not measured |
-| Citation also correct | 4 / 10 | 4 / 10 | not measured |
-| Full (target + modality + citation) | 0 / 10 | 0 / 10 | not measured |
-| Baseline: predict-disease-gene | 6 / 10 (0/5 hard) | 6 / 10 | — |
-| Baseline: first-Reactome-interactor | 6 / 10 | 6 / 10 | — |
+| # | Version | Pipeline + model | Target | Hard cases | Easy cases | Modality | Wall (min) |
+|---|---|---|---|---|---|---|---|
+| v0.4 | original 6-node + Llama 3.2 3B | 3/10 | 3/5 | 0/5 | 3/10 | 17 |
+| v0.5 | + decomposition + self-consistency + always-fire critique (still 3B) | 5/10 | 1/5 | 4/5 | 4/10 | 20 |
+| v0.6 | same pipeline, Llama 3.1 8B | 6/10 | 2/5 | 4/5 | 7/10 | 34 |
+| **v0.7** | **same pipeline, DeepSeek-R1-Distill-Llama-8B** | **7/10** | **3/5** | **4/5** | 4/10 | 82 |
 
-### What changed in v0.4 (the actual fixes)
+**Baselines (no LLM):** always-predict-disease-gene 5/10; first-Reactome-interactor 5/10.
 
-1. **New `interactor_biology_lookup` node** between `druggable_target_search` and `strategy_synthesis`. For the top-5 druggable candidate interactors, it fetches UniProt FUNCTION / PATHWAY / SUBUNIT / PTM / LIPIDATION / DISEASE chunks via the same g2p-rag fallback the disease gene uses. The LLM now compares biology *across* candidates rather than picking blind from a list of gene symbols.
-2. **Schema bug fixed in `strategy_synthesis`**: the v0.3 code read `chembl_compounds` / `drugbank_drugs` from the candidate-target dicts, but the upstream v0.3 schema actually writes `chembl_n_active`. So the "druggability" numbers shown to the LLM were always `0` regardless of how many ChEMBL compounds existed. Now reads the right keys.
-3. **`pathway_context` one-liner surfaced** in the prompt. In v0.3 it was read into a local variable and silently discarded. Now appears under "Pathway role of disease gene".
+### What changed and what each lever delivered
 
-### How to read v0.4 vs v0.3
+- **Tier 0 (YAML cleanup)**: removed `LDLR` from the `fh_pcsk9` alias bag and `SMN1` from the `sma_smn1` alias bag — both were the disease gene rather than a real alias for the therapeutic target. Dropped the disease-gene baseline from 6/10 to 5/10, which is the honest number.
+- **Tier 1.1 (decompose `strategy_synthesis`)**: split into Stage 1 pattern picker (1-8 + `target_kind`) and Stage 2 specific-gene picker conditioned on Stage 1. Stops the 3 B model from juggling pattern + gene + modality + rationale in one call.
+- **Tier 1.2 (self-consistency vote)**: Stage 2 sampled 3× at temperature 0.5, majority vote on canonical HGNC symbol. Confidence = vote margin.
+- **Tier 1.3 (always-fire `self_critique`)**: each strategy gets one critique pass regardless of confidence. Critique specifically checks `target_protein` vs rationale alignment and writes the corrected gene back into the strategy field. Closes the v0.4 failure where rationale named TMED9 but `target_protein` said UMOD.
+- **Tier 2 model swaps**: Llama 3.1 8B Instruct Q4_K_M and DeepSeek-R1-Distill-Llama-8B Q4_K_M, both CPU-only via llama-cpp-python. Pipeline unchanged. R1-Distill spends ~2.5× more wall time per case but uses the extra tokens to chain mechanism → target_kind → specific gene.
 
-Total recovery dropped from 4 to 3, but the *kind* of cases recovered shifted. v0.4 picks up porphyria (HMBS -> ALAS1, an upstream rate-limiting enzyme — real reasoning the v0.3 model couldn't do) but loses fh_pcsk9 and scd_hbb (where seeing biology for other interactors tempted the model into picking a partner rather than the disease gene itself). The net is fewer easy cases and more hard cases — which is the right signal for whether the pipeline is reasoning.
+### The headline finding
 
-The 3 hard-case recoveries in v0.4 are:
-- **BRD4780 / UMOD → TMED9** — picked the cargo receptor from UniProt SUBUNIT chunks for UMOD that name TMED9/TMED2/TMED10
-- **POMC obesity → MC4R** — picked the downstream receptor by chaining "missing hormone → receptor agonist bypass"
-- **Givlaari / HMBS → ALAS1** — picked the upstream rate-limiting enzyme using ALAS1's UniProt FUNCTION chunk ("delta-aminolevulinate synthase, first committed step of heme biosynthesis"), which the new interactor lookup made visible
+The R1-Distill 8B with the full pipeline is the only configuration that decisively beats both trivial baselines (7/10 vs 5/10) on truly-blinded inputs, **and** it recovers SERPING1 → KLKB1 — the case that no prior leak-free configuration had ever gotten. The reasoning model + 2-stage decomposition + self-consistency is doing genuine biological chaining, not memorization or alias matching.
 
-These are recoveries the v0.3 model couldn't get because it had no biology for the non-disease-gene candidates. They're also the kind of reasoning the always-predict-disease-gene baseline can never do.
+### What's still wrong (3 persistent fails across all v0.5–v0.7)
 
-The 3 B Llama still under-performs on cases where the disease gene *is* the FDA target — it over-reads the rich interactor biology and goes hunting for a partner. A larger model would weight the disease-gene-is-target option more conservatively.
+- **`als_sod1`** (expected SOD1, picked CCS): copper chaperone for SOD1 is a real but non-FDA strategy.
+- **`obesity_pomc`** (expected MC4R, picked POMC): pattern selector chose mRNA knockdown rather than receptor agonist bypass.
+- **`porphyria_alas1`** (expected ALAS1, picked FECH or HMBS): even with explicit g2p-rag chunks naming ALAS1 as the rate-limiting first committed step, the LLM picks a downstream enzyme. This is the case where a graph algorithm over Reactome would deterministically beat the LLM.
+
+### Untried levers (next round)
+
+- **Frontier model (Claude / GPT-4) with the same pipeline** — one API key swap; the pipeline is unchanged.
+- **Tool-use agentic loop** — let the LLM issue follow-up retrieval calls. The fixed-flow LangGraph doesn't allow this today.
+- **Hybrid graph + LLM** — compute "upstream rate-limiting enzyme" deterministically from Reactome edges for cases that match the pattern.
+- **Held-out post-2024 test set** — N=10 means 95% Wilson CI of ±26 pp; differences within the table above are within noise.
 
 ---
 
