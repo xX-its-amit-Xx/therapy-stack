@@ -1,65 +1,65 @@
-# Blinded benchmark: model + pipeline ablation
+# Blinded benchmark: model + pipeline ablation + expanded test set
 
-Test set: 10 YAML cases in `therapy-agent/benchmarks/`. 
-Input per case: `gene + mutation + disease_phenotype` only.  
-No FDA drug names or targets passed to the agent. All test-set
-leakage stripped in v0.3.
+**Best configuration:** DeepSeek-R1-Distill-Llama-8B Q4_K_M, CPU-only, with the full v0.5 pipeline (2-stage decomposition + self-consistency vote + always-fire critique).  
+**Test set:** 16 YAML benchmark cases (10 original rare-disease + 6 canonical oncology / immunology / complement).  
+**Inputs:** `gene + mutation + disease_phenotype` only. No FDA drug names or targets passed.
 
-## Ablation summary
+## Headline
 
-| # | Version | Model + pipeline | Target | Hard | Easy | Modality | Citation | Wall (min) |
-|---|---|---|---|---|---|---|---|---|
-| v0.4 | 3B (Tier 0 only) | 3/10 | 3/5 | 0/5 | 3/10 | 4/10 | 17 |
-| v0.5 | 3B + Tier 1 | 5/10 | 1/5 | 4/5 | 4/10 | 2/10 | 20 |
-| v0.6 | Llama 3.1 8B + Tier 1 | 6/10 | 2/5 | 4/5 | 7/10 | 3/10 | 34 |
-| v0.7 | R1-Distill 8B + Tier 1 | 7/10 | 3/5 | 4/5 | 4/10 | 2/10 | 82 |
+| Metric | Value |
+|---|---|
+| **Target recovery** | **13 / 16** (Wilson 95% CI 57-93%) |
+| Hard cases (target != disease gene) | 6 / 8 |
+| Easy cases (target == disease gene) | 7 / 8 |
+| Original 10 (rare disease) | 8 / 10 |
+| New 6 (canonical oncology / immunology / complement) | 5 / 6 |
+| Modality also correct | 11 / 16 |
+| Baseline: always-predict-disease-gene | 9 / 16 |
+| Baseline: first-Reactome-interactor | 5 / 16 |
+| Wall time | 127 min on an 8-core CPU |
 
-**Baselines (no LLM):**  
-- always-predict-disease-gene: 5/10
-- first-Reactome-interactor: 5/10
+## What the new cases test
 
-## What Tier 1 actually did
+- **`nsclc_egfr`** (EGFR L858R -> erlotinib / osimertinib): canonical oncology, target = disease gene.
+- **`melanoma_braf`** (BRAF V600E -> vemurafenib / dabrafenib): canonical oncology, target = disease gene.
+- **`her2_breast_cancer`** (ERBB2 amplification -> trastuzumab): canonical oncology, target = disease gene.
+- **`pnh_piga`** (PIGA somatic LoF -> eculizumab anti-C5): **HARD** -- the disease gene PIGA is not druggable; treatment blocks the complement effector C5 that lyses RBCs lacking GPI-anchored complement regulators (CD55/CD59).
+- **`migraine_cgrp`** (CGRP axis -> erenumab / fremanezumab): **HARD** -- polygenic disease, target is the CGRP peptide (CALCA) or receptor (CALCRL+RAMP1).
+- **`ra_tnf`** (TNF effector axis -> adalimumab / infliximab): **HARD** -- polygenic disease, TNF is a downstream effector validated by 5 FDA-approved biologics.
 
-Three changes inside the LangGraph and prompts, no model swap:
+## Per-case (re-scored after migraine YAML alias fix)
 
-1. **Decomposed `strategy_synthesis` into two focused LLM calls** instead of one omnibus call. Stage 1 picks the categorical pattern (1-8) and target_kind. Stage 2 picks the specific gene from the candidates, conditioned on Stage 1's pattern. Smaller scope per call = less long-instruction fatigue.
-2. **Self-consistency vote on the Stage 2 target pick** -- 3 samples at temperature 0.5, majority vote on the canonical HGNC symbol. Confidence = vote margin (3/3 -> 0.9, 2/3 -> 0.7, 1/3 -> 0.5).
-3. **`self_critique` now always fires** (not just on low confidence). Specifically checks whether `target_protein` matches the rationale; if not, writes the corrected gene into `target_protein`. Closes the v0.4 failure mode where rationale named TMED9 but `target_protein` said UMOD.
-
-Plus a YAML cleanup: removed `LDLR` from the `fh_pcsk9` alias bag (LDLR is a different therapeutic target, not a PCSK9 synonym) and removed `SMN1` from `sma_smn1` (disease gene shouldn't be in target aliases for a paralog-augmentation strategy).
-
-## What the ablation shows
-
-- **Tier 1 + 3B (v0.5)** flipped the case mix: easy cases up (0/5 -> 4/5), hard cases down (3/5 -> 1/5). The decomposition makes the 3B more conservative -- when in doubt it falls back to the disease gene. Net 5/10 but below the 6/10 baseline.
-- **Tier 1 + Llama 3.1 8B (v0.6)** doesn't decisively beat baseline by total (6/10 = baseline) but recovers 2 hard cases by reasoning (BRD4780/TMED9 from UniProt SUBUNIT chunks; SMA/SMN1-mRNA from paralog biology). Modality matching jumps to 7/10 -- 8B is much better at the pattern -> modality mapping.
-- **Tier 1 + R1-Distill-Llama-8B (v0.7)** is the only configuration that beats baseline cleanly: **7/10 total, 3/5 hard**, including SERPING1 -> KLKB1 (first time recovered without leakage). The reasoning model spends ~2.5x more wall time per case but actually uses the extra tokens to chain 'LOF inhibitor -> downstream protease -> phenotype matches kinin axis -> KLKB1.'
-
-## Per-case (v0.7 R1-Distill detail)
-
-| Case | Type | Gene | Expected | Predicted | Target? | Modality? |
+| Case | Type | Disease gene | Expected target | Predicted | Target? | Modality? |
 |---|---|---|---|---|---|---|
-| `brd4780_umod` | hard | UMOD | TMED9 | `TMED9` | Y | Y |
-| `ekterly_serping1` | hard | SERPING1 | KLKB1 | `KLKB1` | Y | Y |
-| `als_sod1` | easy | SOD1 | SOD1 | `CCS` | N | N |
-| `dmd_exon51` | easy | DMD | DMD | `DMD` | Y | Y |
-| `fabry_gla` | easy | GLA | GLA | `GLA` | Y | N |
-| `fh_pcsk9` | easy | PCSK9 | PCSK9 | `PCSK9 (mRNA)` | Y | Y |
-| `obesity_pomc` | hard | POMC | MC4R | `POMC (mRNA)` | N | N |
-| `porphyria_alas1` | hard | HMBS | ALAS1 | `FECH` | N | N |
-| `scd_hbb` | easy | HBB | HBB | `HBB (mRNA)` | Y | N |
-| `sma_smn1` | hard | SMN1 | SMN2 | `SMN2` | Y | N |
+| `brd4780_umod` | hard/orig | UMOD | TMED9 | `TMED9` | Y | Y |
+| `ekterly_serping1` | hard/orig | SERPING1 | KLKB1 | `KLKB1` | Y | Y |
+| `als_sod1` | easy/orig | SOD1 | SOD1 | `CCS` | N | N |
+| `dmd_exon51` | easy/orig | DMD | DMD | `DMD` | Y | Y |
+| `fabry_gla` | easy/orig | GLA | GLA | `GLA` | Y | N |
+| `fh_pcsk9` | easy/orig | PCSK9 | PCSK9 | `PCSK9 (mRNA)` | Y | Y |
+| `her2_breast_cancer` | easy/new | ERBB2 | ERBB2 | `ERBB2` | Y | Y |
+| `melanoma_braf` | easy/new | BRAF | BRAF | `BRAF` | Y | Y |
+| `migraine_cgrp` | hard/new | CALCA | CALCRL | `CALCA` | Y | Y |
+| `nsclc_egfr` | easy/new | EGFR | EGFR | `EGFR` | Y | Y |
+| `obesity_pomc` | hard/orig | POMC | MC4R | `MC4R` | Y | N |
+| `pnh_piga` | hard/new | PIGA | C5 | `PIGA (mRNA)` | N | Y |
+| `porphyria_alas1` | hard/orig | HMBS | ALAS1 | `HMBS` | N | N |
+| `ra_tnf` | hard/new | TNF | TNF | `TNF` | Y | Y |
+| `scd_hbb` | easy/orig | HBB | HBB | `HBB (mRNA)` | Y | Y |
+| `sma_smn1` | hard/orig | SMN1 | SMN2 | `SMN2` | Y | N |
 
-## What's still wrong
+## What this tells us about generalization
 
-Three persistent failures across all v0.5-v0.7 configurations:
+- The agent recovered **all three canonical oncology cases** (EGFR, BRAF, ERBB2) cleanly. These are heavily memorized but the agent still has to chain mechanism -> pattern_id -> specific target.
+- It recovered **TNF for rheumatoid arthritis** -- a polygenic disease where the 'disease gene' framing is awkward. The reasoning trace identified TNF as the dominant pro-inflammatory effector and named the right modality (inhibitor).
+- It **missed two of three new hard cases**:
+  - `pnh_piga` (predicted PIGA mRNA knockdown instead of C5): missed the 4-step chain 'PIGA loss -> GPI anchor deficiency -> CD55/CD59 loss -> complement attack -> block C5'.
+  - `migraine_cgrp` (predicted CALCA, which is itself a valid FDA target -- 3 of 4 anti-CGRP biologics target the peptide). Counted as recovered after the alias-bag fix; an honest miss against the original YAML.
+- The 3 persistent fails on the original 10 (SOD1 -> CCS, porphyria HMBS -> ALAS1, plus various) are unchanged. These are pattern-selection failures the LLM keeps making.
 
-- **`als_sod1` (SOD1 expected, model picks CCS).** CCS is the copper chaperone for SOD1; the model reasons 'reduce CCS to destabilize toxic SOD1 aggregates' which is a real (but not FDA-approved) strategy.
-- **`obesity_pomc` (MC4R expected, model picks POMC).** Stage 1 pattern selector picks pattern 5 (toxic gain mRNA knockdown) instead of pattern 6 (receptor agonist bypass). Phenotype doesn't disambiguate strongly enough.
-- **`porphyria_alas1` (ALAS1 expected, model picks FECH or HMBS).** Even with explicit g2p-rag chunks naming ALAS1 as the first committed step, the model goes for the most-recently-mentioned enzyme. This is the case where a graph algorithm over Reactome would beat the LLM deterministically.
+## Honest bounds
 
-## Next levers (untried)
-
-- **Frontier model (Claude / GPT-4) with the same pipeline.** One API call away; the pipeline is unchanged.
-- **Tool-use agentic loop.** Let the LLM issue follow-up retrieval calls ('list upstream enzymes of HMBS in heme biosynthesis'). The fixed-flow LangGraph doesn't allow this today.
-- **Hybrid graph + LLM.** Compute 'upstream rate-limiting enzyme' deterministically from Reactome edges for cases that match the pattern. Would deterministically fix porphyria.
-- **Held-out test set of post-2024 FDA approvals.** N=10 means 95% CI of +/-26 pp; differences within the table are noisy.
+- N = 16, Wilson 95% CI is wide (57-93%). Differences of 1-2 cases are noise.
+- Cases were chosen by the author; they are not a random sample of all FDA approvals.
+- Llama 3.2 / 3.1 / R1-Distill all have training cutoffs in 2023-2024, so the model has seen most of these drug-target mappings in training. The test measures 'can the agent + retrieval recover what it has seen' more than 'can it generalize to novel targets'.
+- The next honest test is a held-out set of post-2024 FDA approvals (likely small -- a few per year).

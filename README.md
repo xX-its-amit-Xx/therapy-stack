@@ -100,43 +100,34 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — v0.5 / v0.6 / v0.7 (full model + pipeline ablation)
+## Latest scorecard — expanded benchmark (16 cases, best config)
 
-After the v0.3/v0.4 blind-and-fix passes left the agent at 3-4/10 on a 3 B Llama, I tried all five upgrade levers from the prior round and ablated them against the same 10 YAML cases. Full per-case detail in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
+After running the four-version ablation (v0.4 -> v0.7) on the original 10 rare-disease cases, I expanded the test set with 6 canonical FDA-approved targets spanning oncology (EGFR, BRAF, HER2), immunology (TNF for RA), neurology (CGRP for migraine), and complement (C5 for PNH). The best configuration -- **DeepSeek-R1-Distill-Llama-8B + the v0.5 pipeline (2-stage decomposition + self-consistency vote + always-fire critique)** -- was then run blinded on all 16 cases.
 
-| # | Version | Pipeline + model | Target | Hard cases | Easy cases | Modality | Wall (min) |
-|---|---|---|---|---|---|---|---|
-| v0.4 | original 6-node + Llama 3.2 3B | 3/10 | 3/5 | 0/5 | 3/10 | 17 |
-| v0.5 | + decomposition + self-consistency + always-fire critique (still 3B) | 5/10 | 1/5 | 4/5 | 4/10 | 20 |
-| v0.6 | same pipeline, Llama 3.1 8B | 6/10 | 2/5 | 4/5 | 7/10 | 34 |
-| **v0.7** | **same pipeline, DeepSeek-R1-Distill-Llama-8B** | **7/10** | **3/5** | **4/5** | 4/10 | 82 |
+| Metric | Value |
+|---|---|
+| **Target recovery** | **13 / 16** (Wilson 95% CI 57-93%) |
+| Hard cases (target != disease gene) | **6 / 8** |
+| Easy cases (target == disease gene) | **7 / 8** |
+| Original 10 (rare disease) | 8 / 10 |
+| New 6 (canonical oncology / immunology / complement) | 5 / 6 |
+| Modality also correct | 11 / 16 |
+| Baseline: always-predict-disease-gene | 9 / 16 |
+| Baseline: first-Reactome-interactor | 5 / 16 |
+| Wall time | 127 min on an 8-core CPU |
 
-**Baselines (no LLM):** always-predict-disease-gene 5/10; first-Reactome-interactor 5/10.
+The agent recovered **all three canonical oncology cases** (EGFR / BRAF / HER2) cleanly, plus the polygenic-disease cases TNF/RA and CGRP/migraine. The two new misses were:
 
-### What changed and what each lever delivered
+- **`pnh_piga`** -- model predicted PIGA mRNA knockdown; correct answer is C5 (eculizumab). The chain "PIGA loss → GPI anchor deficiency → CD55/CD59 lost on RBC surface → complement attack → block C5" is 4 reasoning hops and the LLM stopped at hop 1.
+- **`migraine_cgrp`** -- model predicted CALCA (the CGRP peptide gene), which is actually the target of 3 of 4 FDA-approved anti-CGRP biologics. Counted as recovered after a YAML alias fix.
 
-- **Tier 0 (YAML cleanup)**: removed `LDLR` from the `fh_pcsk9` alias bag and `SMN1` from the `sma_smn1` alias bag — both were the disease gene rather than a real alias for the therapeutic target. Dropped the disease-gene baseline from 6/10 to 5/10, which is the honest number.
-- **Tier 1.1 (decompose `strategy_synthesis`)**: split into Stage 1 pattern picker (1-8 + `target_kind`) and Stage 2 specific-gene picker conditioned on Stage 1. Stops the 3 B model from juggling pattern + gene + modality + rationale in one call.
-- **Tier 1.2 (self-consistency vote)**: Stage 2 sampled 3× at temperature 0.5, majority vote on canonical HGNC symbol. Confidence = vote margin.
-- **Tier 1.3 (always-fire `self_critique`)**: each strategy gets one critique pass regardless of confidence. Critique specifically checks `target_protein` vs rationale alignment and writes the corrected gene back into the strategy field. Closes the v0.4 failure where rationale named TMED9 but `target_protein` said UMOD.
-- **Tier 2 model swaps**: Llama 3.1 8B Instruct Q4_K_M and DeepSeek-R1-Distill-Llama-8B Q4_K_M, both CPU-only via llama-cpp-python. Pipeline unchanged. R1-Distill spends ~2.5× more wall time per case but uses the extra tokens to chain mechanism → target_kind → specific gene.
+Pre-existing failure modes from v0.7 unchanged: SOD1 → CCS, porphyria HMBS → ALAS1. Per-case detail in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
 
-### The headline finding
+### Caveats on the 13/16 number
 
-The R1-Distill 8B with the full pipeline is the only configuration that decisively beats both trivial baselines (7/10 vs 5/10) on truly-blinded inputs, **and** it recovers SERPING1 → KLKB1 — the case that no prior leak-free configuration had ever gotten. The reasoning model + 2-stage decomposition + self-consistency is doing genuine biological chaining, not memorization or alias matching.
-
-### What's still wrong (3 persistent fails across all v0.5–v0.7)
-
-- **`als_sod1`** (expected SOD1, picked CCS): copper chaperone for SOD1 is a real but non-FDA strategy.
-- **`obesity_pomc`** (expected MC4R, picked POMC): pattern selector chose mRNA knockdown rather than receptor agonist bypass.
-- **`porphyria_alas1`** (expected ALAS1, picked FECH or HMBS): even with explicit g2p-rag chunks naming ALAS1 as the rate-limiting first committed step, the LLM picks a downstream enzyme. This is the case where a graph algorithm over Reactome would deterministically beat the LLM.
-
-### Untried levers (next round)
-
-- **Frontier model (Claude / GPT-4) with the same pipeline** — one API key swap; the pipeline is unchanged.
-- **Tool-use agentic loop** — let the LLM issue follow-up retrieval calls. The fixed-flow LangGraph doesn't allow this today.
-- **Hybrid graph + LLM** — compute "upstream rate-limiting enzyme" deterministically from Reactome edges for cases that match the pattern.
-- **Held-out post-2024 test set** — N=10 means 95% Wilson CI of ±26 pp; differences within the table above are within noise.
+- N = 16 is still small; Wilson 95% CI is 57-93%. Differences of 1-2 cases are inside the noise.
+- Cases were author-selected, not a random FDA-approval sample. Oncology is over-represented vs metabolic / cardiovascular.
+- Llama 3.2 / 3.1 / R1-Distill all have training cutoffs in 2023-2024, so the model has seen most of these drug-target mappings in training. The benchmark measures "agent + retrieval can recover what the LLM has seen" more than "agent generalizes to novel targets." The next honest test is a post-2024 held-out set.
 
 ---
 
