@@ -49,19 +49,39 @@ def _find_therapy_agent_root() -> Path:
 
 
 _THERAPY_AGENT_ROOT = _find_therapy_agent_root()
-_PRIMARY_DIR = _THERAPY_AGENT_ROOT / "benchmarks"
-_SUPP_DIR = _THERAPY_AGENT_ROOT / "benchmarks" / "cases"
+_PRIMARY_DIR = _THERAPY_AGENT_ROOT / "benchmarks"                       # primary (Ekterly + BRD4780)
+_SUPP_DIR    = _THERAPY_AGENT_ROOT / "benchmarks" / "cases"             # supplementary dev set
+_HELDOUT_DIR = _THERAPY_AGENT_ROOT / "benchmarks" / "heldout_2024_2025" # post-cutoff val set
 
 
 # ── case loading ──────────────────────────────────────────────────────────────
 
-def load_cases() -> list[dict]:
+def load_cases(set_name: str = "dev") -> list[dict]:
+    """Load benchmark cases by named split.
+
+    set_name:
+      - "dev" (default): primary + supplementary (16 cases, used for iteration).
+      - "val": post-2024 held-out set (FDA approvals after Llama / R1-Distill
+        training cutoff -- the closest thing we have to a true generalization
+        test).
+      - "all": dev + val combined.
+    """
+    dirs: list = []
+    if set_name in ("dev", "all"):
+        dirs += [_PRIMARY_DIR, _SUPP_DIR]
+    if set_name in ("val", "all"):
+        dirs.append(_HELDOUT_DIR)
+    if not dirs:
+        raise ValueError(f"Unknown set {set_name!r}; use dev|val|all.")
     cases: list[dict] = []
-    for d in (_PRIMARY_DIR, _SUPP_DIR):
+    for d in dirs:
+        if not d.exists():
+            continue
         for p in sorted(d.glob("*.yaml")):
             data = yaml.safe_load(p.read_text(encoding="utf-8"))
             if data and "input" in data and "expected_outputs" in data:
                 data["_file"] = str(p.relative_to(_THERAPY_AGENT_ROOT))
+                data["_set"] = "val" if d == _HELDOUT_DIR else "dev"
                 cases.append(data)
     return cases
 
@@ -205,14 +225,14 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 # ── main async loop ───────────────────────────────────────────────────────────
 
 async def main_async(args) -> int:
-    cases = load_cases()
+    cases = load_cases(args.set)
     if args.only:
         wanted = {w.strip() for w in args.only.split(",") if w.strip()}
         cases = [c for c in cases if c["id"] in wanted]
     if args.limit:
         cases = cases[:args.limit]
 
-    print(f"Running {len(cases)} cases with therapy-agent backend "
+    print(f"Running {len(cases)} cases ({args.set} set) with therapy-agent backend "
           f"= {os.environ.get('THERAPY_AGENT_LLM_BACKEND', '?')}.\n")
 
     # Compute baselines first — they're free.
@@ -260,8 +280,16 @@ async def main_async(args) -> int:
             print(f"    -> {flag}  pred={pred!r}  expected={exp['target_protein']}")
             print(f"       modality_ok={modality_ok}  citation_ok={citation_ok}  "
                   f"conf_ok={conf_ok}  conf={conf:.2f}  ({elapsed:.1f}s)")
+            # Aggregate token usage across all LLM calls in this case.
+            tu = state.get("token_usage") or []
+            total_in = sum(int(t.get("input_tokens", 0) or 0) for t in tu)
+            total_out = sum(int(t.get("output_tokens", 0) or 0) for t in tu)
+            per_node = {}
+            for t in tu:
+                per_node[t.get("node", "?")] = per_node.get(t.get("node", "?"), 0) + 1
             results.append({
                 "case_id": cid,
+                "set": case.get("_set", "dev"),
                 "gene": inp["gene"],
                 "expected_target": exp["target_protein"],
                 "expected_aliases": exp.get("target_aliases", []),
@@ -282,6 +310,11 @@ async def main_async(args) -> int:
                 "citation_recovered": citation_ok,
                 "confidence_meets_min": conf_ok,
                 "elapsed_s": round(elapsed, 1),
+                # Cost / latency telemetry -- production teams should track per
+                # case so prompt changes and model swaps can be cost-budgeted.
+                "tokens_in_total": total_in,
+                "tokens_out_total": total_out,
+                "llm_calls_per_node": per_node,
             })
         except Exception as exc:
             elapsed = time.time() - t0
@@ -341,6 +374,11 @@ async def main_async(args) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--set", type=str, default="dev",
+                    choices=["dev", "val", "all"],
+                    help="Which split to run. dev = primary + supplementary "
+                         "(used for iteration); val = post-2024 held-out "
+                         "(true generalization test); all = both.")
     ap.add_argument("--only", type=str, default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("blinded_results.json"))

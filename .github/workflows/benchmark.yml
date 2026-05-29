@@ -1,0 +1,148 @@
+name: blinded-benchmark
+
+# Runs the blinded benchmark on every PR and on every push to main.
+#
+# CPU-only Llama runs would take >1 hr in GitHub Actions; the public CI
+# uses Anthropic Claude via API for speed, gated behind a repository
+# secret. If ANTHROPIC_API_KEY isn't set the workflow skips the actual
+# benchmark and only validates that the harness imports + the YAML
+# benchmarks parse + baselines compute.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "sandbox/**"
+      - ".github/workflows/benchmark.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      set:
+        description: "Which split (dev | val | all)"
+        default: "dev"
+        type: choice
+        options: [dev, val, all]
+
+permissions:
+  contents: read
+  pull-requests: write   # so the regression check can post the comparison comment
+
+jobs:
+  smoke:
+    name: smoke -- baselines + YAML validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          fetch-depth: 1
+
+      - name: Check out therapy-agent sibling
+        uses: actions/checkout@v4
+        with:
+          repository: xX-its-amit-Xx/therapy-agent
+          path: therapy-agent
+          fetch-depth: 1
+
+      - name: Check out fda-strategy-triples sibling
+        uses: actions/checkout@v4
+        with:
+          repository: xX-its-amit-Xx/fda-strategy-triples
+          path: fda-strategy-triples
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (no LLM)
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml pandas pyarrow requests httpx tenacity \
+            python-dotenv langgraph langchain-core pydantic typer rich
+          pip install -e ./fda-strategy-triples --no-deps
+          pip install -e ./therapy-agent --no-deps
+
+      - name: Validate YAML benchmarks parse
+        working-directory: sandbox
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from run_blinded import load_cases
+          for s in ('dev', 'val', 'all'):
+              cases = load_cases(s)
+              assert all('input' in c and 'expected_outputs' in c for c in cases)
+              print(f'{s} set: {len(cases)} cases OK')
+          "
+
+      - name: Compute baselines (no LLM)
+        working-directory: sandbox
+        env:
+          THERAPY_AGENT_LLM_BACKEND: anthropic  # not used; baselines don't call LLM
+        run: |
+          python run_blinded.py --baselines-only --set ${{ github.event.inputs.set || 'all' }}
+
+  benchmark:
+    name: blinded benchmark (Anthropic)
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: xX-its-amit-Xx/therapy-agent
+          path: therapy-agent
+      - uses: actions/checkout@v4
+        with:
+          repository: xX-its-amit-Xx/fda-strategy-triples
+          path: fda-strategy-triples
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (Anthropic backend)
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml pandas pyarrow requests httpx tenacity \
+            python-dotenv langgraph langchain-core pydantic typer rich anthropic
+          pip install -e ./fda-strategy-triples --no-deps
+          pip install -e ./therapy-agent --no-deps
+
+      - name: Run benchmark on dev set
+        working-directory: sandbox
+        env:
+          THERAPY_AGENT_LLM_BACKEND: anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: claude-sonnet-4-6
+        run: python run_blinded.py --set dev --out dev_results.json
+
+      - name: Run benchmark on val set
+        working-directory: sandbox
+        env:
+          THERAPY_AGENT_LLM_BACKEND: anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: claude-sonnet-4-6
+        run: python run_blinded.py --set val --out val_results.json
+
+      - name: Regression check
+        working-directory: sandbox
+        run: |
+          python ../scripts/regression_check.py \
+            --dev dev_results.json \
+            --val val_results.json \
+            --baseline ../baselines.json
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            sandbox/dev_results.json
+            sandbox/val_results.json
+          retention-days: 30

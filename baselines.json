@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "Frozen benchmark scores that the CI regression check gates against.",
+    "Update ONLY in an explicit PR with reviewer sign-off; bumping these",
+    "without rerunning the benchmark is a process violation.",
+    "",
+    "Lockfile schema per split:",
+    "  target_recovered:    int   -- target-protein recovery from blinded_*.json",
+    "  hard_recovered:      int   -- hard-case recovery (target != disease gene)",
+    "  total_seconds_max:   int   -- 25% over this trips a COST regression",
+    "  model + pipeline:    str   -- the config that produced these numbers",
+    "  date:                str   -- ISO date of the run",
+    "  notes:               str   -- anything reviewers should know"
+  ],
+  "dev": {
+    "n_cases": 16,
+    "target_recovered": 13,
+    "hard_recovered": 6,
+    "total_seconds_max": 9000,
+    "model": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M",
+    "pipeline": "v0.5 (2-stage decomposition + self-consistency vote + always-fire critique)",
+    "date": "2026-05-29",
+    "notes": "v0.7 + Tier 1 + alias-bag fix for migraine_cgrp. 13/16 = 81% target, 6/8 hard. Note: every model with a training cutoff <= 2024 has likely seen these mappings; this is fitting, not generalization."
+  },
+  "val": {
+    "n_cases": 6,
+    "target_recovered": 3,
+    "hard_recovered": 0,
+    "total_seconds_max": 3500,
+    "model": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M",
+    "pipeline": "v0.5",
+    "date": "2026-05-29",
+    "notes": "Post-2024 FDA approvals (Resmetirom 2024-03, Vorasidenib 2024-08, Sotatercept 2024-03, Mavorixafor 2024-04, Crinecerfont 2024-12, Garadacimab 2025-06). All 3 easy cases recovered (target == disease gene); all 3 hard cases missed -- this is the honest generalization number. Agent ties the disease-gene baseline at 3/6. The 'reasoning' visible on dev does not transfer cleanly when the training data hasn't been seen."
+  }
+}

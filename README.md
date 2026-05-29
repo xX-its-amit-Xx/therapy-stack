@@ -100,34 +100,45 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — expanded benchmark (16 cases, best config)
+## Latest scorecard — dev set + held-out post-2024 val set
 
-After running the four-version ablation (v0.4 -> v0.7) on the original 10 rare-disease cases, I expanded the test set with 6 canonical FDA-approved targets spanning oncology (EGFR, BRAF, HER2), immunology (TNF for RA), neurology (CGRP for migraine), and complement (C5 for PNH). The best configuration -- **DeepSeek-R1-Distill-Llama-8B + the v0.5 pipeline (2-stage decomposition + self-consistency vote + always-fire critique)** -- was then run blinded on all 16 cases.
+Production-grade evaluation now has two splits.
 
-| Metric | Value |
-|---|---|
-| **Target recovery** | **13 / 16** (Wilson 95% CI 57-93%) |
-| Hard cases (target != disease gene) | **6 / 8** |
-| Easy cases (target == disease gene) | **7 / 8** |
-| Original 10 (rare disease) | 8 / 10 |
-| New 6 (canonical oncology / immunology / complement) | 5 / 6 |
-| Modality also correct | 11 / 16 |
-| Baseline: always-predict-disease-gene | 9 / 16 |
-| Baseline: first-Reactome-interactor | 5 / 16 |
-| Wall time | 127 min on an 8-core CPU |
+| Split | Cases | Source | Use |
+|---|---|---|---|
+| **dev** | 16 | `therapy-agent/benchmarks/{*.yaml, cases/*.yaml}` | Iterate prompts + retrieval; overfit risk is real |
+| **val** | 6 | `therapy-agent/benchmarks/heldout_2024_2025/*.yaml` | FDA approvals **after** every current open-weight model's training cutoff. Never touched during iteration. |
 
-The agent recovered **all three canonical oncology cases** (EGFR / BRAF / HER2) cleanly, plus the polygenic-disease cases TNF/RA and CGRP/migraine. The two new misses were:
+Best configuration: **DeepSeek-R1-Distill-Llama-8B + v0.5 pipeline** (2-stage decomposition + self-consistency vote + always-fire critique), CPU only, no API key.
 
-- **`pnh_piga`** -- model predicted PIGA mRNA knockdown; correct answer is C5 (eculizumab). The chain "PIGA loss → GPI anchor deficiency → CD55/CD59 lost on RBC surface → complement attack → block C5" is 4 reasoning hops and the LLM stopped at hop 1.
-- **`migraine_cgrp`** -- model predicted CALCA (the CGRP peptide gene), which is actually the target of 3 of 4 FDA-approved anti-CGRP biologics. Counted as recovered after a YAML alias fix.
+| Metric | Dev (16) | Val (6, post-2024) | Notes |
+|---|---|---|---|
+| Target recovery | 13 / 16 (81%) | **3 / 6 (50%)** | Wilson 95% CI val: 19-81% |
+| Hard cases (target != disease gene) | 6 / 8 | **0 / 3** | The honest finding -- reasoning does not generalize |
+| Easy cases (target == disease gene) | 7 / 8 | 3 / 3 | Disease-gene mapping recovers cleanly |
+| Modality also correct | 11 / 16 | 5 / 6 | Modality crosswalk is robust |
+| Baseline: predict-disease-gene | 9 / 16 | 3 / 6 | Agent ties baseline on val |
+| Wall time | 127 min | 46 min | R1-Distill on 8-core CPU |
 
-Pre-existing failure modes from v0.7 unchanged: SOD1 → CCS, porphyria HMBS → ALAS1. Per-case detail in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md).
+### What the val number actually means
 
-### Caveats on the 13/16 number
+The 13/16 on dev was real but optical. Every model with a training cutoff in or before 2024 has very likely seen the mappings for PCSK9, SOD1, BCL11A, ALAS1, EGFR, BRAF, HER2, TNF, etc. -- the dev set is largely a fitting / memorization test. The val set is six FDA approvals from **2024-03 through 2025-06** (Resmetirom, Vorasidenib, Sotatercept, Mavorixafor, Crinecerfont, Garadacimab). On those: all three target-equals-disease-gene cases (Resmetirom/THRB, Vorasidenib/IDH1, Mavorixafor/CXCR4) recovered cleanly. **All three cross-pathway cases missed**:
 
-- N = 16 is still small; Wilson 95% CI is 57-93%. Differences of 1-2 cases are inside the noise.
-- Cases were author-selected, not a random FDA-approval sample. Oncology is over-represented vs metabolic / cardiovascular.
-- Llama 3.2 / 3.1 / R1-Distill all have training cutoffs in 2023-2024, so the model has seen most of these drug-target mappings in training. The benchmark measures "agent + retrieval can recover what the LLM has seen" more than "agent generalizes to novel targets." The next honest test is a post-2024 held-out set.
+- **Sotatercept** (BMPR2 disease gene → ACVR2A target): model predicted BMPR2 (the disease gene). Correct chain is "BMP/activin imbalance → ActRIIA-Fc fusion traps activin ligands". 3-hop reasoning the model didn't do.
+- **Crinecerfont** (CYP21A2 → CRHR1): model predicted CYP21A2 (the disease gene). Correct chain is "cortisol low → ACTH high → adrenal androgen excess → block CRH receptor upstream of ACTH". 4-hop hormonal-feedback reasoning.
+- **Garadacimab** (SERPING1 → F12): model predicted KLKB1. KLKB1 is the right answer for the *other* HAE drug in dev (Ekterly/sebetralstat). The model learned the dev mapping and applied it to a related case where the actual answer is the adjacent F12 protease in the same cascade.
+
+### The production interpretation
+
+The agent learned reasoning *templates* from dev that work when the answer is in training data, but does not transfer those templates to genuinely novel cross-pathway cases. The 0/3 on val hard cases is consistent with "the model retrieves and rationalises known mappings; it does not derive novel ones." For a production deployment this is a load-bearing finding: the agent is useful as a suggestion / explanation surface on familiar biology, **not** as a novel-target proposer.
+
+### Production layer
+
+- [`baselines.json`](baselines.json) -- frozen scores the CI regression check gates against. Update only with reviewer sign-off.
+- [`scripts/regression_check.py`](scripts/regression_check.py) -- compares a fresh run to `baselines.json`; fails the build if target recovery drops more than the tolerance, hard-case recovery drops, or wall time climbs >25%.
+- [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) -- smoke job (YAML validation + baselines, always runs); benchmark job (Claude via API, runs when `ANTHROPIC_API_KEY` secret is set).
+- [`RUNBOOK.md`](RUNBOOK.md) -- on-call doc: splits, run commands, regression-check semantics, common failure modes, quarterly val-set rotation.
+- `run_blinded.py` now emits per-case `tokens_in_total` / `tokens_out_total` / `llm_calls_per_node` for cost/latency budgets.
 
 ---
 
