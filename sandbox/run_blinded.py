@@ -96,6 +96,7 @@ _THERAPY_AGENT_ROOT = _find_therapy_agent_root()
 _PRIMARY_DIR = _THERAPY_AGENT_ROOT / "benchmarks"                       # primary (Ekterly + BRD4780)
 _SUPP_DIR    = _THERAPY_AGENT_ROOT / "benchmarks" / "cases"             # supplementary dev set
 _HELDOUT_DIR = _THERAPY_AGENT_ROOT / "benchmarks" / "heldout_2024_2025" # post-cutoff val set
+_ADV_DIR     = _THERAPY_AGENT_ROOT / "benchmarks" / "adversarial"       # adversarial probes
 
 
 # ── case loading ──────────────────────────────────────────────────────────────
@@ -115,8 +116,10 @@ def load_cases(set_name: str = "dev") -> list[dict]:
         dirs += [_PRIMARY_DIR, _SUPP_DIR]
     if set_name in ("val", "all"):
         dirs.append(_HELDOUT_DIR)
+    if set_name in ("adversarial", "all"):
+        dirs.append(_ADV_DIR)
     if not dirs:
-        raise ValueError(f"Unknown set {set_name!r}; use dev|val|all.")
+        raise ValueError(f"Unknown set {set_name!r}; use dev|val|adversarial|all.")
     cases: list[dict] = []
     for d in dirs:
         if not d.exists():
@@ -125,7 +128,12 @@ def load_cases(set_name: str = "dev") -> list[dict]:
             data = yaml.safe_load(p.read_text(encoding="utf-8"))
             if data and "input" in data and "expected_outputs" in data:
                 data["_file"] = str(p.relative_to(_THERAPY_AGENT_ROOT))
-                data["_set"] = "val" if d == _HELDOUT_DIR else "dev"
+                if d == _HELDOUT_DIR:
+                    data["_set"] = "val"
+                elif d == _ADV_DIR:
+                    data["_set"] = "adversarial"
+                else:
+                    data["_set"] = "dev"
                 cases.append(data)
     return cases
 
@@ -458,10 +466,11 @@ async def main_async(args) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", type=str, default="dev",
-                    choices=["dev", "val", "all"],
+                    choices=["dev", "val", "adversarial", "all"],
                     help="Which split to run. dev = primary + supplementary "
                          "(used for iteration); val = post-2024 held-out "
-                         "(true generalization test); all = both.")
+                         "(true generalization test); adversarial = "
+                         "hand-crafted failure-mode probes; all = combined.")
     ap.add_argument("--only", type=str, default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("blinded_results.json"))
