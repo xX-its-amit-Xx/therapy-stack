@@ -426,6 +426,10 @@ async def main_async(args) -> int:
                 # mechanism-to-strategy archetypes the agent decided on.
                 "strategy_pattern_id": strat_dict.get("pattern_id", ""),
                 "strategy_target_kind": strat_dict.get("target_kind", ""),
+                # First 6 reasoning_trace lines -- includes Stage1 pattern
+                # selection, override fires, Stage2 votes, critique verdict.
+                # Truncated for size; full trace lives in agent logs.
+                "reasoning_trace": (state.get("reasoning_trace") or [])[:6],
                 # Cost / latency telemetry -- production teams should track per
                 # case so prompt changes and model swaps can be cost-budgeted.
                 "tokens_in_total": total_in,
