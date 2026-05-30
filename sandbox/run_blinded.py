@@ -392,6 +392,11 @@ async def main_async(args) -> int:
             per_node = {}
             for t in tu:
                 per_node[t.get("node", "?")] = per_node.get(t.get("node", "?"), 0) + 1
+            # Expose the Stage-1 pattern selection so callers (and the
+            # pattern-distribution analysis) can see which mechanism-to-
+            # strategy category the agent committed to. Skipped in v0.9.1
+            # debug if Stage 1 was overridden by the feedback-axis re-pick.
+            strat_dict = state.get("strategy") or {}
             results.append({
                 "case_id": cid,
                 "set": case.get("_set", "dev"),
@@ -417,6 +422,10 @@ async def main_async(args) -> int:
                 "citation_recovered": citation_ok,
                 "confidence_meets_min": conf_ok,
                 "elapsed_s": round(elapsed, 1),
+                # Stage-1 categorical strategy pattern: which of the 9 known
+                # mechanism-to-strategy archetypes the agent decided on.
+                "strategy_pattern_id": strat_dict.get("pattern_id", ""),
+                "strategy_target_kind": strat_dict.get("target_kind", ""),
                 # Cost / latency telemetry -- production teams should track per
                 # case so prompt changes and model swaps can be cost-budgeted.
                 "tokens_in_total": total_in,
