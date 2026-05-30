@@ -68,6 +68,13 @@ jobs:
       - name: Unit tests (scoring + helpers)
         run: pytest tests/ -v
 
+      - name: Benchmark YAML lint (schema + leakage)
+        # Static check: every YAML has the required fields AND the input
+        # block doesn't contain FDA drug / brand names that would leak
+        # the answer to the LLM. Catches the v0.2 -> v0.3 leakage class
+        # before it gets merged.
+        run: python scripts/benchmark_lint.py
+
       - name: Validate YAML benchmarks parse
         working-directory: sandbox
         run: |
