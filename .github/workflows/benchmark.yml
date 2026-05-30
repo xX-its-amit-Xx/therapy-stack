@@ -72,7 +72,7 @@ jobs:
           import sys
           sys.path.insert(0, '.')
           from run_blinded import load_cases
-          for s in ('dev', 'val', 'all'):
+          for s in ('dev', 'val', 'adversarial', 'all'):
               cases = load_cases(s)
               assert all('input' in c and 'expected_outputs' in c for c in cases)
               print(f'{s} set: {len(cases)} cases OK')
@@ -130,12 +130,71 @@ jobs:
         run: python run_blinded.py --set val --out val_results.json
 
       - name: Regression check
+        id: regression
         working-directory: sandbox
         run: |
           python ../scripts/regression_check.py \
             --dev dev_results.json \
             --val val_results.json \
             --baseline ../baselines.json
+
+      - name: Download main-branch baseline run for diff
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: benchmark.yml
+          branch: main
+          name_is_regexp: true
+          name: benchmark-results-.*
+          path: baseline_artifacts/
+          if_no_artifact_found: warn
+
+      - name: Per-case diff vs main baseline
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          if [ -f baseline_artifacts/dev_results.json ]; then
+            python scripts/run_diff.py \
+              --baseline baseline_artifacts/dev_results.json \
+              --candidate sandbox/dev_results.json \
+              --label "dev: main -> PR ${{ github.event.number }}" \
+              > diff_dev.md
+            echo "::group::dev diff"
+            cat diff_dev.md
+            echo "::endgroup::"
+          fi
+          if [ -f baseline_artifacts/val_results.json ]; then
+            python scripts/run_diff.py \
+              --baseline baseline_artifacts/val_results.json \
+              --candidate sandbox/val_results.json \
+              --label "val: main -> PR ${{ github.event.number }}" \
+              > diff_val.md
+            echo "::group::val diff"
+            cat diff_val.md
+            echo "::endgroup::"
+          fi
+
+      - name: Post diff as PR comment
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmark-diff
+          path: |
+            diff_dev.md
+            diff_val.md
+
+      - name: Calibration analysis
+        continue-on-error: true
+        run: |
+          python scripts/calibration.py \
+            sandbox/dev_results.json \
+            sandbox/val_results.json \
+            > calibration.md
+          echo "::group::calibration"
+          cat calibration.md
+          echo "::endgroup::"
 
       - name: Upload results
         uses: actions/upload-artifact@v4
@@ -145,4 +204,7 @@ jobs:
           path: |
             sandbox/dev_results.json
             sandbox/val_results.json
+            diff_dev.md
+            diff_val.md
+            calibration.md
           retention-days: 30
