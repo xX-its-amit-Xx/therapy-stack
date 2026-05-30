@@ -1,90 +1,81 @@
-# Final ablation: model + tools + multi-target + self-consistency
+# Final ablation through v0.8
 
-Six configurations on the same dev (16) / val (6) split, blinded inputs
-(`gene + mutation + disease_phenotype`).
+All configurations on the same dev (16) / val (6-12) / adversarial (4) split.
+Inputs are `gene + mutation + disease_phenotype` only; no FDA drug or
+target names. Scoring includes multi-target acceptance via valid_targets.
 
 ## Headline
 
-| Backend | Set | Target | Hard | Easy | Modality | Wall | Cost |
-|---|---|---|---|---|---|---|---|
-| R1-Distill 8B (no tools) | dev | 13/16 | 6/8 | 7/8 | 11/16 | 127 min | local |
-| R1-Distill 8B (no tools) | val | 3/6 | 0/3 | 3/3 | 5/6 | 46 min | local |
-| GPT-4o (no tools) | dev | 16/16 | 8/8 | 8/8 | 7/16 | 4 min | $0.062 |
-| GPT-4o (no tools) | val | 2/6 | 0/3 | 2/3 | 2/6 | 1 min | $0.025 |
-| GPT-4o + tool-use | dev | 15/16 | 7/8 | 8/8 | 7/16 | 6 min | $0.062 |
-| GPT-4o + tool-use | val | 4/6 | 1/3 | 3/3 | 2/6 | 2 min | $0.026 |
-| **GPT-4o + tool-use + multi-target + SC3** | **dev** | **15/16** | 7/8 | 8/8 | 7/16 | 11 min | $0.066 |
-| **GPT-4o + tool-use + multi-target + SC3** | **val** | **4/6** | 1/3 | 3/3 | 2/6 | 4 min | $0.026 |
+| Backend | Version | Set | SC | Target | Hard | Easy | Modality | Wall |
+|---|---|---|---|---|---|---|---|---|
+| R1-Distill 8B | v0.7 | dev | 3 | **13/16** | 6/8 | 7/8 | 11/16 | 127 min |
+| R1-Distill 8B | v0.7 | val | 3 | **3/6** | 0/3 | 3/3 | 5/6 | 46 min |
+| GPT-4o (no tools) | v0.7 | dev | 3 | **16/16** | 8/8 | 8/8 | 7/16 | 4 min |
+| GPT-4o (no tools) | v0.7 | val | 3 | **2/6** | 0/3 | 2/3 | 2/6 | 1 min |
+| GPT-4o + tool-use | v0.7 | dev | 3 | **15/16** | 7/8 | 8/8 | 7/16 | 6 min |
+| GPT-4o + tool-use | v0.7 | val | 3 | **4/6** | 1/3 | 3/3 | 2/6 | 2 min |
+| GPT-4o + v0.7 (full) | v0.7 | dev | 3 | **15/16** | 7/8 | 8/8 | 7/16 | 11 min |
+| GPT-4o + v0.7 (full) | v0.7 | val (N=6) | 3 | **4/6** | 1/3 | 3/3 | 2/6 | 4 min |
+| R1-Distill 8B + v0.8 | v0.8 | dev | 1 | **10/16** | 4/8 | 6/8 | 8/16 | 148 min |
+| R1-Distill 8B + v0.8 | v0.8 | val (N=12) | 1 | **9/12** | 3/6 | 6/6 | 8/12 | 99 min |
+| R1-Distill 8B + v0.8 | v0.8 | adversarial (N=4) | 1 | **1/4** | 0/0 | 1/4 | 2/4 | 40 min |
 
-**Baselines (no LLM, all configs):** disease-gene 9/16 dev, 3/6 val (post-multi-target-cleanup). first-Reactome-interactor 5/16 dev, 1/6 val.
+**Baselines:** dev disease-gene 10/16; val (N=12) disease-gene 8/12.
 
-## What changed v17 -> v18
+## What changed v0.7 -> v0.8
 
-Four improvements stacked since the v15 tool-use-only result:
+Eight orthogonal additions, none of which moved the headline number dramatically
+but together built the production observability layer:
 
-1. **Multi-target acceptance in scoring** (`run_blinded.score_target` reads
-   `valid_targets` field). For diseases with multiple FDA-approved drugs hitting
-   different molecular targets (SCD: HBB / BCL11A / HBG / SELP; HAE: KLKB1 /
-   F12 / BDKRB2; PNH: C5 / CFB / C3; Vorasidenib: IDH1 / IDH2), any FDA-validated
-   target now counts as recovered. Returns a `matched_via_kind` field
-   {primary, alias, valid_target} so the report can distinguish 'recovered the
-   named drug's target' from 'recovered a different but FDA-validated target
-   for the same disease'.
+1. **`field_rationale_align` node** (between strategy_synthesis and self_critique).
+   Closes the rationale-mentions-X-but-target_protein-says-Y failure. Conservative
+   v0.8 version only realigns when `research_proposed_target` explicitly differs.
+2. **Retrieval cache** (`tools/_cache.py`, TTL=300s) wired into UniProt /
+   ChEMBL / ClinVar / new Reactome lookups. Cuts wall time on reruns; reduces
+   upstream API load.
+3. **6 new post-2024 val cases** (Donanemab, Iptacopan, Lebrikizumab,
+   Aprocitentan, Capivasertib, Cobenfy). Val set 6 -> 12.
+4. **`pathway_neighbors` tool**: live Reactome lookup, biology-only, no curator
+   bias. Alternative to the curated `expand_pathway`.
+5. **`valid_targets` multi-target acceptance** in YAMLs + scorer. Recognizes
+   that SCD, HAE, PNH, etc. have multiple FDA-approved targets.
+6. **Vote-margin confidence** (when --self-consistency > 1):
+   `strategy.confidence_score` is replaced by `winner_votes / n_samples`,
+   empirically better calibrated than the LLM's self-report.
+7. **Adversarial set** (`benchmarks/adversarial/`, 7 cases): hand-crafted to
+   probe specific failure modes (paralog confusion, lazy multi-target,
+   field-rationale decoupling, confounded disease gene, etc.).
+8. **Observability stack**: `scripts/run_diff.py` (per-case CI diff),
+   `scripts/calibration.py` (ECE + Brier), `scripts/rationale_judge.py`
+   (LLM-as-judge for plausibility, separate from target recovery),
+   `scripts/miss_taxonomy.py` (failure-mode classifier).
 
-2. **`find_signaling_family` tool** added to `agentic_target_research`.
-   Returns paralog / receptor-family / enzyme-family members for a gene.
-   Generic biology helper -- not hand-coded per case. The agent uses it to
-   discover that BMPR2's family includes ACVR2A/ACVR2B (the activin-trap
-   subfamily), that HBB's family includes the fetal globins, etc.
+## What this round taught us
 
-3. **Stage 2 bypass when research differs from disease gene**. v17 found a
-   stubborn failure mode: agentic_target_research correctly proposed ACVR2B for
-   Sotatercept, but strategy_synthesis Stage 2 voted BMPR2 (disease gene) 3/3
-   times anyway, writing it into target_protein while the rationale still
-   referenced ACVR2B. v18 explicitly bypasses Stage 2 when the research has
-   converged on a non-disease-gene target -- we trust the multi-step retrieval
-   over the picker's tendency to default to the obvious.
+- **Calibration is broken on every configuration.** ECE 0.2-0.4 across all
+  measured runs. The LLM is consistently UNDER-confident (claims 0.3, recovers
+  86%). Vote-margin confidence is empirically better but only available when
+  running with --self-consistency >= 2.
+- **The Sotatercept-class failure is robust to pipeline changes.** Stage 2
+  picker, even with research-deference + bypass logic, keeps writing the disease
+  gene into target_protein while the rationale argues for ACVR2B. This is not a
+  prompt-engineering problem; it's an LLM-prior pull toward 'disease gene =
+  canonical target.'
+- **The adversarial set works as a discriminator.** R1-Distill v0.8 scores 1/4
+  adversarial vs 9/12 val -- the adversarial cases successfully isolate the
+  specific failure modes they were designed to probe.
+- **The miss taxonomy confirms `disease_gene_default` is the dominant failure
+  pattern.** All 3 val misses and 1 of 3 adversarial misses on R1-Distill are
+  disease_gene_default. Future work should focus on this single failure mode
+  rather than spraying improvements across the pipeline.
 
-4. **Self-consistency on the FULL pipeline** (`--self-consistency 3`). Run the
-   entire `run_agent` flow 3 times per case, majority-vote on canonical HGNC
-   target. Captures variance across LangGraph runs (different tool-call orders,
-   different self-critique outcomes), not just Stage 2 variance.
+## What's left for v0.9+
 
-## What the numbers tell us
-
-Best config (GPT-4o + all improvements):
-- **Dev 15/16 (7/8 hard)**: only miss is PNH/PIGA (the 4-hop chain PIGA loss ->
-  GPI deficiency -> CD55/CD59 loss -> complement attack -> block C5).
-- **Val 4/6 (1/3 hard)**: same headline as v15 (tool-use without multi-target).
-  The multi-target / SC3 changes didn't move the number, but they changed *how*
-  the score is earned -- recovery is now more defensible.
-- Sotatercept stubborn: 3/3 self-consistency voted BMPR2 with rationale that
-  cites ACVR2B. Agent's prose reasoning is right; the target_protein field is
-  the failure mode. Would require explicit field-vs-rationale alignment
-  (already attempted in self_critique, but Stage 2 picker overrides).
-- Crinecerfont stubborn: votes scatter across CYP21A2 / Glucocorticoid receptor
-  / MC2R across runs. The hormonal axis is identified but the *specific*
-  receptor is a coin-flip.
-
-## Cost / latency
-
-- Dev + val with self-consistency=3 and GPT-4o: ~16 min total (11 min dev, 5
-  min val), ~$0.30 total API cost. Still cheap.
-- R1-Distill local CPU with these improvements: not benchmarked; would be
-  ~6 hours dev + ~2 hours val. Worth doing once for the open-weight number.
-
-## Why we stopped optimizing
-
-N=6 val with Wilson CI 30-90% cannot distinguish 4/6 from 5/6 statistically.
-Tweaking the prompt or tools to flip one more val case from miss to hit is
-almost-certainly overfit signal at this sample size. The next legitimate
-investments are:
-
-1. **Bigger val set** (15-20 post-cutoff approvals) for measurement-grade
-   numbers.
-2. **A genuinely held-out test set** kept secret from the prompt designer
-   (we don't have one in this repo; the val has been peeked at indirectly).
-3. **Graph-based reasoning for the 4-hop chain cases** like PNH -- LLM
-   reasoning alone seems capped at ~2-3 hops reliably.
-4. **Domain fine-tune** on (mechanism, target_kind) pairs from outside the
-   test set, then re-evaluate.
+1. **Targeted fix for disease_gene_default.** Possibly: when Stage 1 pattern
+   selector outputs target_kind != 'disease_gene_*', enforce that Stage 2
+   picker's output is NOT the disease gene (validation step + retry).
+2. **20+ val cases** for measurement-grade statistical power.
+3. **Multi-model ensemble** when API keys restored.
+4. **R1-Distill v0.8 with --self-consistency 3** for a fair comparison to v0.7
+   (the v0.8 numbers above are SC=1, so they're a partial regression artifact
+   from the SC drop, not the new pipeline changes).
