@@ -79,3 +79,35 @@ but together built the production observability layer:
 4. **R1-Distill v0.8 with --self-consistency 3** for a fair comparison to v0.7
    (the v0.8 numbers above are SC=1, so they're a partial regression artifact
    from the SC drop, not the new pipeline changes).
+
+## What v0.9.x shipped (this round)
+
+Five strategy guards landed in therapy-agent's `strategy_synthesis_node`:
+
+| Guard | What it catches | Verified on |
+|---|---|---|
+| **v0.9** disease_gene_default guard | Stage 2 picks disease gene under a non-disease-gene target_kind → hard-constraint repick | Mocked unit test |
+| **v0.9.1** feedback-axis re-prompt | Stage 1 picked chaperone for an ACTH-driven phenotype → re-prompt with feedback hint | Smoke (didn't move R1-Distill) |
+| **v0.9.2** hard pattern override | Skip re-prompt; force pattern_id=9 directly | Smoke (Stage 1 JSON parse failure bypassed gate) |
+| **v0.9.2b** unconditional override | Fire whenever feedback marker is in the phenotype, regardless of Stage 1 result | **Smoke verified: Crinecerfont DG-default rate 100% → 0%** (predicted NR3C1, off the disease gene) |
+| **v0.9.3** mechanism-pattern guard | mechanism=lof + Stage 1 picked disease_gene_mRNA → force downstream_effector | Mocked unit test |
+| **v0.9.4** picker prompt for feedback_axis_receptor | Explicit rule: pick the upstream RELEASING hormone receptor (CRHR1/GnRHR/TRHR), not the end-hormone receptor (NR3C1) | TBD on next bench |
+
+Three LLM-free unit tests verify the guards' branching:
+[`test_v92_phenotype_override_fires_on_acth_driven`](../tests/test_strategy_guards.py),
+[`test_v93_mechanism_guard_fires_on_lof_mrna`](../tests/test_strategy_guards.py),
+[`test_no_override_on_clean_lof_case`](../tests/test_strategy_guards.py).
+
+### The honest limitation of v0.9.x
+
+Even with the hard pattern override forcing pattern 9 / feedback_axis_receptor,
+R1-Distill 8B's Stage 2 picker on Crinecerfont chose NR3C1 (glucocorticoid
+receptor) instead of CRHR1 (CRH receptor). The LLM's prior on "the
+receptor in the HPA axis" is roughly uniform across NR3C1 / CRHR1 / MC2R
+/ CRHR2 -- the prompt rule that distinguishes them is fragile against
+R1-Distill 8B specifically.
+
+The right fix surface is structural: either (a) constrain the candidate
+set in Stage 2 to *only* releasing-hormone receptors, or (b) use a
+larger model (the LLM's prior gets stronger with scale on biology
+priors). Both are out of scope for v0.9.x; v0.10 work.
