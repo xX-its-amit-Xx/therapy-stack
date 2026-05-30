@@ -505,10 +505,29 @@ async def main_async(args) -> int:
           f"({dg_default_rate*100:.0f}%)")
     print()
 
+    # Capture the agent's git commit so a result file is traceable to
+    # exact source. Cheap: one subprocess call; non-fatal on failure
+    # (e.g. CI machines without git).
+    import subprocess
+    def _git_commit(repo: Path) -> str:
+        try:
+            return subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(repo), stderr=subprocess.DEVNULL,
+                text=True, timeout=2,
+            ).strip()
+        except Exception:
+            return ""
+
+    repo_root = Path(__file__).resolve().parents[1]
+    agent_root = repo_root.parent / "therapy-agent"
+
     if args.out:
         Path(args.out).write_text(json.dumps({
             "backend": os.environ.get("THERAPY_AGENT_LLM_BACKEND", "anthropic"),
             "model_path": os.environ.get("LLAMA_MODEL_PATH", ""),
+            "stack_commit": _git_commit(repo_root),
+            "agent_commit": _git_commit(agent_root),
             "n_cases": n,
             "target_recovered": target_n,
             "modality_recovered": modality_n,
