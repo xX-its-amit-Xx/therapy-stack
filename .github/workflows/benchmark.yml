@@ -75,6 +75,16 @@ jobs:
         # before it gets merged.
         run: python scripts/benchmark_lint.py
 
+      - name: Docstring lint (every script in scripts/)
+        run: python scripts/docs_lint.py
+
+      - name: Val-integrity check (no edits to held-out cases)
+        # Fails the PR if a val case (benchmarks/heldout_2024_2025/*)
+        # is touched without --allow-val-edit. Editing a val case in
+        # response to a result invalidates the held-out claim; see
+        # RUNBOOK section 8 for the proper quarterly rotation.
+        run: python scripts/val_integrity_check.py
+
       - name: Validate YAML benchmarks parse
         working-directory: sandbox
         run: |
