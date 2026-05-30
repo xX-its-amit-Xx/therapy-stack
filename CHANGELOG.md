@@ -23,6 +23,7 @@ didn't exist yet at that version.
 | v0.9.2 (this round) | 2026-05-30 | tbd | tbd | tbd | Hard pattern override (skips Stage 1 re-prompt; force pattern_id=9). Crinecerfont smoke STILL missed -- Stage 1 LLM JSON parse was failing and target_kind was empty so the override gate didn't fire. |
 | v0.9.2b (this round) | 2026-05-30 | tbd | tbd | tbd | Unconditional override on phenotype markers regardless of Stage 1 result. Crinecerfont smoke MOVED off disease-gene-default: predicted NR3C1 (glucocorticoid receptor) instead of CYP21A2. Right pattern category (feedback_axis_receptor), wrong specific receptor (NR3C1 vs CRHR1). DG-default rate 100% → 0% on this case. |
 | v0.9.3 (this round) | 2026-05-30 | tbd | tbd | tbd | Mechanism-pattern guard: if mechanism=lof and Stage 1 picks disease_gene_mRNA, force downstream_effector. Targets the Iptacopan/PNH miss class. LLM-free unit tests verify guard fires correctly. |
+| v0.9.4 (this round) | 2026-05-30 | tbd | tbd | tbd | Stage 2 picker prompt now has an explicit rule for target_kind=feedback_axis_receptor: pick the UPSTREAM RELEASING HORMONE receptor (CRHR1, GnRHR, TRHR) not the end-hormone receptor (NR3C1). Targets the v0.9.2b NR3C1 mispick on Crinecerfont. |
 
 ## Lever-by-lever summary
 
