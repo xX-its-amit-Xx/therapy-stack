@@ -91,7 +91,7 @@ Five strategy guards landed in therapy-agent's `strategy_synthesis_node`:
 | **v0.9.2** hard pattern override | Skip re-prompt; force pattern_id=9 directly | Smoke (Stage 1 JSON parse failure bypassed gate) |
 | **v0.9.2b** unconditional override | Fire whenever feedback marker is in the phenotype, regardless of Stage 1 result | **Smoke verified: Crinecerfont DG-default rate 100% → 0%** (predicted NR3C1, off the disease gene) |
 | **v0.9.3** mechanism-pattern guard | mechanism=lof + Stage 1 picked disease_gene_mRNA → force downstream_effector | Mocked unit test |
-| **v0.9.4** picker prompt for feedback_axis_receptor | Explicit rule: pick the upstream RELEASING hormone receptor (CRHR1/GnRHR/TRHR), not the end-hormone receptor (NR3C1) | TBD on next bench |
+| **v0.9.4** picker prompt for feedback_axis_receptor | Explicit rule: pick the upstream RELEASING hormone receptor (CRHR1/GnRHR/TRHR), not the end-hormone receptor (NR3C1) | Single-case smoke: predicted=MC2R/"ACTH receptor" -- moved off NR3C1 but landed on the pituitary-tropic receptor instead of the hypothalamic releasing-hormone receptor. Strict score still 0/1, but **the model has converged on the HPA axis** (Crinetics' atumelnant/CRN04894 targets MC2R for CAH in Phase 2/3 -- biologically defensible, not yet FDA-approved). |
 
 Three LLM-free unit tests verify the guards' branching:
 [`test_v92_phenotype_override_fires_on_acth_driven`](../tests/test_strategy_guards.py),

@@ -50,8 +50,38 @@ a Stage-2 failure (right pattern, wrong specific target). The
 ```
 
 v0.9.4 adds an explicit prompt rule for `target_kind=feedback_axis_receptor`
-distinguishing releasing-hormone receptors from end-hormone receptors;
-whether that bridges the remaining gap is a TBD on the next bench.
+distinguishing releasing-hormone receptors from end-hormone receptors.
+
+**v0.9.4 single-case smoke result on Crinecerfont:**
+
+```
+predicted_target:      ACTH receptor  (= MC2R)
+strategy_pattern_id:   9
+strategy_target_kind:  feedback_axis_receptor
+target_recovered:      false (expected: CRHR1, valid_targets is strict)
+disease_gene_default_rate: 0%
+```
+
+Trajectory of predictions on the Crinecerfont case across guard versions:
+
+| Guard | Predicted | What it is biologically |
+|---|---|---|
+| v0.9 baseline | CYP21A2 | Disease gene -- WRONG category |
+| v0.9.2b | NR3C1 | End-hormone receptor (glucocorticoid receptor) -- wrong direction |
+| v0.9.4 | MC2R / "ACTH receptor" | Pituitary tropic-hormone receptor -- right axis, wrong node |
+| FDA | CRHR1 | Hypothalamic releasing-hormone receptor -- top of the HPA axis |
+
+The model has converged on the HPA axis. MC2R is a biologically valid
+target (Crinetics' atumelnant / CRN04894 targets MC2R for CAH in
+Phase 2/3 trials) but not yet FDA-approved; the strict `valid_targets`
+list keeps it out, so the bench scores it as a miss.
+
+This is the "right biology, wrong FDA precedent" failure mode -- a
+softer miss than v0.9 baseline's disease_gene_default. v0.10+ work
+needs either: (a) further prompt rule on hypothalamic vs pituitary
+within the HPA axis, (b) candidate-set restriction to releasing-
+hormone receptors only, or (c) a larger model with stronger biology
+priors.
 
 ## What didn't move
 
