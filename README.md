@@ -100,7 +100,23 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — v0.7 (final ablation)
+## Latest scorecard — v0.8 (R1-Distill local, expanded val) + v0.9.x guards
+
+The current best fully-open-weight result on a 12-case val split (post-2024 NMEs, all post-pretraining-cutoff for R1-Distill 8B):
+
+| Backend | Split | Target | Wall | Cost |
+|---|---|---|---|---|
+| R1-Distill 8B local | dev | 12/16 (75%) | 127 min | $0 |
+| R1-Distill 8B local | val | **9/12 (75%)** | 99 min | $0 |
+| R1-Distill 8B local | adversarial | 1/4 (25%) | 40 min | $0 |
+| GPT-4o + ReAct + SC3 | dev | 15/16 (94%) | 6 min | $0.06 |
+| GPT-4o + ReAct + SC3 | val (6-case subset) | 4/6 (67%) | 4 min | $0.03 |
+
+**Caveats:** N is small (Wilson 95% CI on 9/12 val is 46–91%). The GPT-4o val number is on the original 6 cases; R1-Distill ran on the expanded 12. See [honest limitations](#honest-limitations-the-hidden-curriculum) and [`sandbox/COST_FRONTIER.md`](sandbox/COST_FRONTIER.md) for the full split-stratified comparison.
+
+**v0.9.x strategy guards added (this round):** v0.9 disease_gene_default guard; v0.9.2b unconditional feedback-axis override (pattern 9, fires on phenotype markers like "ACTH-driven"); v0.9.3 mechanism-pattern guard (LoF + disease_gene_mRNA → downstream_effector); v0.9.4 picker prompt rule for feedback_axis_receptor. Smoke verifies Crinecerfont moved off disease-gene-default (`disease_gene_default_rate` 100% → 0%) — predicted NR3C1 instead of CYP21A2; correct pattern category, wrong specific receptor. See [`CHANGELOG.md`](CHANGELOG.md) for the lever-by-lever lift.
+
+## Earlier scorecard — v0.7 (final ablation)
 
 Six configurations on the same 16-dev / 6-val split. Inputs are `gene + mutation + disease_phenotype` only (no FDA drug or target names). Per-case detail in [`sandbox/RESULTS_FRONTIER.md`](sandbox/RESULTS_FRONTIER.md). The four pipeline improvements stacked since the prior round: (i) multi-target acceptance scoring against the FDA-validated set per disease; (ii) `find_signaling_family` tool for paralog/family discovery; (iii) Stage-2 bypass when the agentic research has proposed a non-disease-gene target (closes the "rationale says ACVR2B, target_protein writes BMPR2" failure); (iv) full-pipeline self-consistency (`--self-consistency 3`, majority vote on canonical HGNC target).
 
