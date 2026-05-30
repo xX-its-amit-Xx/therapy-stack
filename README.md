@@ -100,56 +100,43 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — dev / val / frontier / tool-use comparison
+## Latest scorecard — v0.7 (final ablation)
 
-Four configurations now sit on the same dev/val split. Same prompts, same retrieval substrate, same scoring. Per-case detail in [`sandbox/RESULTS_FRONTIER.md`](sandbox/RESULTS_FRONTIER.md).
+Six configurations on the same 16-dev / 6-val split. Inputs are `gene + mutation + disease_phenotype` only (no FDA drug or target names). Per-case detail in [`sandbox/RESULTS_FRONTIER.md`](sandbox/RESULTS_FRONTIER.md). The four pipeline improvements stacked since the prior round: (i) multi-target acceptance scoring against the FDA-validated set per disease; (ii) `find_signaling_family` tool for paralog/family discovery; (iii) Stage-2 bypass when the agentic research has proposed a non-disease-gene target (closes the "rationale says ACVR2B, target_protein writes BMPR2" failure); (iv) full-pipeline self-consistency (`--self-consistency 3`, majority vote on canonical HGNC target).
 
 | Backend | Set | Target | Hard | Easy | Wall | Cost |
 |---|---|---|---|---|---|---|
-| R1-Distill 8B (local CPU) | dev | 13/16 | 6/8 | 7/8 | 127 min | ~$0 |
-| R1-Distill 8B (local CPU) | val | 3/6 | 0/3 | 3/3 | 46 min | ~$0 |
-| GPT-4o (no tool-use) | dev | 16/16 | 8/8 | 8/8 | 4 min | $0.06 |
-| GPT-4o (no tool-use) | val | 2/6 | 0/3 | 2/3 | 1 min | $0.03 |
-| GPT-4o + **tool-use loop** | dev | 15/16 | 7/8 | 8/8 | 6 min | $0.06 |
-| **GPT-4o + tool-use loop** | **val** | **4/6** | **1/3** | **3/3** | **2 min** | **$0.03** |
+| R1-Distill 8B (no tools) | dev | 13/16 | 6/8 | 7/8 | 127 min | local |
+| R1-Distill 8B (no tools) | val | 3/6 | 0/3 | 3/3 | 46 min | local |
+| GPT-4o (no tools) | dev | 16/16 | 8/8 | 8/8 | 4 min | $0.06 |
+| GPT-4o (no tools) | val | 2/6 | 0/3 | 2/3 | 1 min | $0.03 |
+| GPT-4o + tool-use | dev | 15/16 | 7/8 | 8/8 | 6 min | $0.06 |
+| GPT-4o + tool-use | val | 4/6 | 1/3 | 3/3 | 2 min | $0.03 |
+| **GPT-4o + tool-use + multi-target + SC3** | **dev** | **15/16** | **7/8** | **8/8** | **11 min** | **$0.07** |
+| **GPT-4o + tool-use + multi-target + SC3** | **val** | **4/6** | **1/3** | **3/3** | **4 min** | **$0.03** |
 
-**Baselines (no LLM):** disease-gene 9/16 dev, 3/6 val.
+**Baselines (no LLM):** disease-gene 9/16 dev, 3/6 val (after stripping the SERPING1-as-HAE-valid-target leak). first-Reactome-interactor 5/16 dev, 1/6 val.
 
-### The tool-use win
+### What the latest improvements did and didn't move
 
-Adding a ReAct-style agentic loop — same model, same dev/val cases — **doubled val recovery (2/6 → 4/6)** and recovered one hard case (0/3 → 1/3). The pipeline change was bigger than the model change.
+- **Multi-target acceptance (`valid_targets` in YAMLs)** properly recognizes that SCD has voxelotor (HBB), Casgevy (BCL11A), hydroxyurea (HBG induction) and crizanlizumab (SELP) — any defensible. HAE has KLKB1, F12, BDKRB2. PNH has C5, CFB, C3. Vorasidenib hits IDH1+IDH2. The number didn't move because the existing recoveries were already on the primary target; the change adds rigor to the score rather than passing extra cases.
+- **`find_signaling_family` tool** correctly surfaced the BMP/activin family (BMPR2 → ACVR2A, ACVR2B, INHBA, GDF8, GDF11) for Sotatercept. The agentic loop proposed ACVR2B. Strategy_synthesis Stage 2 still wrote BMPR2 into `target_protein` 3/3 times, even with the new deference prompt. The failure is field-vs-rationale alignment, not retrieval. Open question.
+- **Stage-2 bypass when research proposes non-disease-gene target** fires when it triggers, but Sotatercept research's proposal was inconsistent across 3 self-consistency runs (research itself sometimes converged on BMPR2). So bypass didn't activate.
+- **Full-pipeline self-consistency (SC3)** dampened run-to-run variance, but on N=6 val the noise was already statistical — voting didn't change the headline.
 
-The new node `agentic_target_research` lives between `interactor_biology_lookup` and `strategy_synthesis`. The LLM can issue up to 4 follow-up retrieval calls via three tools:
-- **`expand_pathway(gene)`** — returns Reactome interactors + pathway role.
-- **`query_biology(gene)`** — returns UniProt FUNCTION / PATHWAY / SUBUNIT / PTM.
-- **`find_hormonal_axis(disease_phenotype)`** — deterministic heuristic mapping endocrine phenotypes to their feedback loops (HPA, HPT, HPG axes).
+### The honest framing of v0.7
 
-Two val cases recovered by genuine multi-step reasoning:
+The agent reliably gets `(disease gene, mutation, phenotype) → defensible target` when:
+- the target is the disease gene itself (8/8 dev easy, 3/3 val easy);
+- the target is in the immediate Reactome / UniProt interactor neighborhood of the disease gene (7/8 dev hard);
+- the agent can chain mechanism → pathway role → specific protein with up to 4 follow-up retrieval calls (Garadacimab F12 win, Resmetirom THRB win).
 
-- **Garadacimab HAE: KLKB1 → F12 (hard).** Without tools, GPT-4o copied the Ekterly mapping (KLKB1) into the novel Garadacimab case. With tools, it called `expand_pathway(SERPING1)` → got `[KLKB1, F12, BDKRB2, ...]`, then queried both KLKB1 and F12 biology, read F12's UniProt FUNCTION (`"initiator of blood coagulation, fibrinolysis..."`), and concluded F12 is the upstream protease. Real cascade disambiguation.
-- **Resmetirom MASH: RXRA → THRB (easy).** Without tools, the model picked RXRA (THRB's heterodimer partner — adjacent biology). With tools the agent queried THRB biology and confirmed THRB itself as the FDA target.
+It does NOT reliably propose targets that require:
+- 4+ hop hormonal-feedback reasoning (Crinecerfont, where the HPA axis is correctly identified but the specific receptor — CRHR1 vs MC2R vs NR3C1 — varies per run);
+- recognition that a specific receptor-family member is a *ligand trap surface* (Sotatercept — research finds ACVR2B but the final answer reverts to the disease gene);
+- the 4-hop chain `PIGA → GPI deficiency → CD55/CD59 loss → complement attack → block C5` (PNH).
 
-Near-miss: **Crinecerfont CAH** — agent identified the HPA axis correctly via `find_hormonal_axis`, but the axis hint surfaces both CRHR1 and MC2R; the model picked MC2R (ACTH receptor on the adrenal) instead of CRHR1 (CRH receptor on the pituitary, the actual Crinecerfont target). 50/50 between two correct-axis receptors.
-
-Still missing: **Sotatercept PAH** — disease gene (BMPR2) picked instead of ACVR2A. The agentic loop didn't surface the activin-trap mechanism. Would need a dedicated tool for ligand-trap modalities.
-
-### What this means
-
-**GPT-4o + tool-use is the configuration that decisively beats the disease-gene baseline on val (4/6 vs 3/6).** The frontier model alone (2/6) couldn't do it. The open-weight reasoning model alone (3/6) couldn't do it. Tool-use is the unlock.
-
-Cost-wise, the entire dev + val sweep with GPT-4o + tool-use costs ~$0.09 and takes 8 minutes wall-clock. Cheaper and faster than the R1-Distill local CPU pass that scored worse on val.
-
-### Next investments (post tool-use)
-
-1. **Self-consistency on tool calls** — re-issue Crinecerfont 3× with majority vote on the final target. Would resolve the CRHR1/MC2R coin-flip.
-2. **`find_ligand_trap_family` tool** — close Sotatercept by surfacing the ActRIIA-Fc activin-trap mechanism.
-3. **Expand val to 15-20 cases** — Wilson CI on 4/6 is 30-90%; need bigger N for the number to be measurement-grade.
-4. **R1-Distill + tool-use comparison** — does the open-weight reasoning model close val with the agentic loop? Two-hour local run, no API cost.
-
-### Production layer (unchanged)
-
-- [`baselines.json`](baselines.json), [`scripts/regression_check.py`](scripts/regression_check.py), [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml), [`RUNBOOK.md`](RUNBOOK.md).
-- `run_blinded.py` emits per-case `tokens_in_total` / `tokens_out_total` / `llm_calls_per_node` for cost/latency budgets.
+A fair pitch: **a retrieval-augmented FDA-target *explainer* for known biology**, not a novel-target *discoverer*. Used as a suggestion / sanity-check surface alongside a domain expert, the system is useful.
 
 ---
 

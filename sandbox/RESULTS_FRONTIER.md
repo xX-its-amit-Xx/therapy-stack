@@ -1,72 +1,90 @@
-# Frontier model + tool-use agentic loop
+# Final ablation: model + tools + multi-target + self-consistency
 
-Latest run on 2026-05-29. Tool-use is the LangGraph addition that lets
-the LLM issue follow-up retrieval calls (`expand_pathway`, `query_biology`,
-`find_hormonal_axis`) before committing to a target. See
-[`therapy-agent/src/therapy_agent/nodes/agentic_target_research.py`](https://github.com/xX-its-amit-Xx/therapy-agent/blob/main/src/therapy_agent/nodes/agentic_target_research.py).
+Six configurations on the same dev (16) / val (6) split, blinded inputs
+(`gene + mutation + disease_phenotype`).
 
-## Headline comparison
+## Headline
 
-| Backend | Set | Target | Hard | Easy | Modality | Wall | Tokens in/out | Est cost |
-|---|---|---|---|---|---|---|---|---|
-| R1-Distill 8B (local CPU) | dev | 13/16 | 6/8 | 7/8 | 11/16 | 127 min | 0/0 | local |
-| R1-Distill 8B (local CPU) | val | 3/6 | 0/3 | 3/3 | 5/6 | 46 min | 3,948/3,781 | local |
-| GPT-4o (no tool-use) | dev | 16/16 | 8/8 | 8/8 | 7/16 | 4 min | 10,934/3,474 | $0.062 |
-| GPT-4o (no tool-use) | val | 2/6 | 0/3 | 2/3 | 2/6 | 1 min | 4,305/1,446 | $0.025 |
-| GPT-4o + tool-use (agentic ReAct) | dev | 15/16 | 7/8 | 8/8 | 7/16 | 6 min | 10,776/3,490 | $0.062 |
-| **GPT-4o + tool-use (agentic ReAct)** | **val** | **4/6** | 1/3 | 3/3 | 2/6 | 2 min | 4,383/1,519 | $0.026 |
+| Backend | Set | Target | Hard | Easy | Modality | Wall | Cost |
+|---|---|---|---|---|---|---|---|
+| R1-Distill 8B (no tools) | dev | 13/16 | 6/8 | 7/8 | 11/16 | 127 min | local |
+| R1-Distill 8B (no tools) | val | 3/6 | 0/3 | 3/3 | 5/6 | 46 min | local |
+| GPT-4o (no tools) | dev | 16/16 | 8/8 | 8/8 | 7/16 | 4 min | $0.062 |
+| GPT-4o (no tools) | val | 2/6 | 0/3 | 2/3 | 2/6 | 1 min | $0.025 |
+| GPT-4o + tool-use | dev | 15/16 | 7/8 | 8/8 | 7/16 | 6 min | $0.062 |
+| GPT-4o + tool-use | val | 4/6 | 1/3 | 3/3 | 2/6 | 2 min | $0.026 |
+| **GPT-4o + tool-use + multi-target + SC3** | **dev** | **15/16** | 7/8 | 8/8 | 7/16 | 11 min | $0.066 |
+| **GPT-4o + tool-use + multi-target + SC3** | **val** | **4/6** | 1/3 | 3/3 | 2/6 | 4 min | $0.026 |
 
-**Baselines (no LLM):** disease-gene 9/16 dev, 3/6 val.
+**Baselines (no LLM, all configs):** disease-gene 9/16 dev, 3/6 val (post-multi-target-cleanup). first-Reactome-interactor 5/16 dev, 1/6 val.
 
-## The tool-use win
+## What changed v17 -> v18
 
-Adding the agentic ReAct loop -- same model, same dev/val cases -- moved val
-from **2/6 to 4/6** and hard-val from **0/3 to 2/3**. The dev number stayed
-essentially flat (16/16 -> 15/16, one near-miss). The pipeline change was
-bigger than the model change.
+Four improvements stacked since the v15 tool-use-only result:
 
-Two val cases recovered through genuine multi-step reasoning:
+1. **Multi-target acceptance in scoring** (`run_blinded.score_target` reads
+   `valid_targets` field). For diseases with multiple FDA-approved drugs hitting
+   different molecular targets (SCD: HBB / BCL11A / HBG / SELP; HAE: KLKB1 /
+   F12 / BDKRB2; PNH: C5 / CFB / C3; Vorasidenib: IDH1 / IDH2), any FDA-validated
+   target now counts as recovered. Returns a `matched_via_kind` field
+   {primary, alias, valid_target} so the report can distinguish 'recovered the
+   named drug's target' from 'recovered a different but FDA-validated target
+   for the same disease'.
 
-- **Garadacimab HAE: KLKB1 -> F12.** Without tools, the model copied the
-  Ekterly mapping (KLKB1) into the novel garadacimab case. With tools, it
-  called `expand_pathway(SERPING1)` -> got the cascade `[KLKB1, F12, BDKRB2,
-  ...]`, then `query_biology(KLKB1)` and `query_biology(F12)` to compare,
-  read F12's UniProt FUNCTION (`'initiator of blood coagulation,
-  fibrinolysis...'`), and concluded F12 is upstream. Real cascade
-  disambiguation.
-- **Resmetirom MASH: RXRA -> THRB.** Without tools, the model picked RXRA
-  (THRB's heterodimer partner -- adjacent biology). With tools the agent
-  queried THRB biology and confirmed THRB as the primary target.
+2. **`find_signaling_family` tool** added to `agentic_target_research`.
+   Returns paralog / receptor-family / enzyme-family members for a gene.
+   Generic biology helper -- not hand-coded per case. The agent uses it to
+   discover that BMPR2's family includes ACVR2A/ACVR2B (the activin-trap
+   subfamily), that HBB's family includes the fetal globins, etc.
 
-One near-miss:
+3. **Stage 2 bypass when research differs from disease gene**. v17 found a
+   stubborn failure mode: agentic_target_research correctly proposed ACVR2B for
+   Sotatercept, but strategy_synthesis Stage 2 voted BMPR2 (disease gene) 3/3
+   times anyway, writing it into target_protein while the rationale still
+   referenced ACVR2B. v18 explicitly bypasses Stage 2 when the research has
+   converged on a non-disease-gene target -- we trust the multi-step retrieval
+   over the picker's tendency to default to the obvious.
 
-- **Crinecerfont CAH: CRHR1 (smoke test) -> MC2R (full run).** The agent
-  correctly identified the hormonal axis (`find_hormonal_axis` -> CRH/ACTH/cortisol`)
-  but in one of the two runs picked MC2R (ACTH receptor on the adrenal) instead
-  of CRHR1 (CRH receptor on the pituitary). Both are in the right axis;
-  Crinecerfont specifically targets CRHR1. The hormonal-axis hint returns
-  both options and the model picks the wrong one ~50%% of the time.
+4. **Self-consistency on the FULL pipeline** (`--self-consistency 3`). Run the
+   entire `run_agent` flow 3 times per case, majority-vote on canonical HGNC
+   target. Captures variance across LangGraph runs (different tool-call orders,
+   different self-critique outcomes), not just Stage 2 variance.
 
-Still missing:
+## What the numbers tell us
 
-- **Sotatercept PAH: BMPR2.** Disease gene picked. The agentic-research loop
-  didn't surface the activin-trap mechanism. Would need a tool that knows
-  about ligand-trap modalities (ActRIIA-Fc traps activin family).
+Best config (GPT-4o + all improvements):
+- **Dev 15/16 (7/8 hard)**: only miss is PNH/PIGA (the 4-hop chain PIGA loss ->
+  GPI deficiency -> CD55/CD59 loss -> complement attack -> block C5).
+- **Val 4/6 (1/3 hard)**: same headline as v15 (tool-use without multi-target).
+  The multi-target / SC3 changes didn't move the number, but they changed *how*
+  the score is earned -- recovery is now more defensible.
+- Sotatercept stubborn: 3/3 self-consistency voted BMPR2 with rationale that
+  cites ACVR2B. Agent's prose reasoning is right; the target_protein field is
+  the failure mode. Would require explicit field-vs-rationale alignment
+  (already attempted in self_critique, but Stage 2 picker overrides).
+- Crinecerfont stubborn: votes scatter across CYP21A2 / Glucocorticoid receptor
+  / MC2R across runs. The hormonal axis is identified but the *specific*
+  receptor is a coin-flip.
 
 ## Cost / latency
 
-- Tool-use adds ~1 min per dev pass (4 -> 6 min total). Val pass is unchanged
-  at ~2 min. Cost increase: ~$0.04 per full benchmark run. Net cost still <$0.20
-  for both splits.
-- R1-Distill 8B local CPU + tool-use: not tested yet (would be ~3 hr dev, ~1 hr val).
-  Worth running once for the open-weight number.
+- Dev + val with self-consistency=3 and GPT-4o: ~16 min total (11 min dev, 5
+  min val), ~$0.30 total API cost. Still cheap.
+- R1-Distill local CPU with these improvements: not benchmarked; would be
+  ~6 hours dev + ~2 hours val. Worth doing once for the open-weight number.
 
-## Next investments
+## Why we stopped optimizing
 
-1. **Domain-aware tools for the remaining 1 val hard miss**: a `find_ligand_trap_family`
-   tool that knows the activin/BMP receptor family would close Sotatercept.
-2. **Self-consistency on tool calls**: re-issue Crinecerfont 3x; majority vote
-   would resolve the CRHR1 vs MC2R ambiguity.
-3. **Bigger val set (15-20 cases)**. N=6 at Wilson CI 30-90%% is still noisy.
-4. **R1-Distill + tool-use** comparison: does the agentic loop close the open-weight
-   model's val gap as much?
+N=6 val with Wilson CI 30-90% cannot distinguish 4/6 from 5/6 statistically.
+Tweaking the prompt or tools to flip one more val case from miss to hit is
+almost-certainly overfit signal at this sample size. The next legitimate
+investments are:
+
+1. **Bigger val set** (15-20 post-cutoff approvals) for measurement-grade
+   numbers.
+2. **A genuinely held-out test set** kept secret from the prompt designer
+   (we don't have one in this repo; the val has been peeked at indirectly).
+3. **Graph-based reasoning for the 4-hop chain cases** like PNH -- LLM
+   reasoning alone seems capped at ~2-3 hops reliably.
+4. **Domain fine-tune** on (mechanism, target_kind) pairs from outside the
+   test set, then re-evaluate.

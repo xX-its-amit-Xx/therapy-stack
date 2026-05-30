@@ -14,22 +14,22 @@
   ],
   "dev": {
     "n_cases": 16,
-    "target_recovered": 13,
-    "hard_recovered": 6,
-    "total_seconds_max": 9000,
-    "model": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M",
-    "pipeline": "v0.5 (2-stage decomposition + self-consistency vote + always-fire critique)",
-    "date": "2026-05-29",
-    "notes": "v0.7 + Tier 1 + alias-bag fix for migraine_cgrp. 13/16 = 81% target, 6/8 hard. Note: every model with a training cutoff <= 2024 has likely seen these mappings; this is fitting, not generalization."
+    "target_recovered": 15,
+    "hard_recovered": 7,
+    "total_seconds_max": 800,
+    "model": "GPT-4o (OpenAI) with full v0.7 pipeline",
+    "pipeline": "v0.7 (tool-use ReAct + multi-target acceptance + find_signaling_family + Stage-2-research-deference + full-pipeline self-consistency 3x)",
+    "date": "2026-05-30",
+    "notes": "15/16 dev with 7/8 hard. Single miss is PNH/PIGA (4-hop complement chain). Most dev cases are in GPT-4o's training cutoff -- dev is fitting, not generalization."
   },
   "val": {
     "n_cases": 6,
     "target_recovered": 4,
     "hard_recovered": 1,
-    "total_seconds_max": 3500,
-    "model": "GPT-4o (OpenAI) with tool-use agentic loop",
-    "pipeline": "v0.6 (v0.5 + agentic_target_research ReAct node)",
-    "date": "2026-05-29",
-    "notes": "Tool-use loop (agentic_target_research node) was added 2026-05-29. With it: 4/6 val (1/3 hard). Specifically recovered Garadacimab F12 (cascade disambiguation) and Resmetirom THRB (adjacency-correction). R1-Distill 8B without tools: 3/6 val (0/3 hard). GPT-4o without tools: 2/6 val (0/3 hard). The tool-use loop is the unlock; the frontier model alone was not."
+    "total_seconds_max": 400,
+    "model": "GPT-4o (OpenAI) with full v0.7 pipeline",
+    "pipeline": "v0.7",
+    "date": "2026-05-30",
+    "notes": "4/6 val (1/3 hard). Recoveries: Garadacimab F12 (cascade disambiguation via tool-use), Resmetirom THRB, Mavorixafor CXCR4, Vorasidenib IDH1. Misses: Crinecerfont (HPA-axis identified but specific receptor coin-flip), Sotatercept (rationale argues ACVR2B; target_protein writes BMPR2 -- field-vs-rationale failure even after Stage 2 bypass). Multi-target acceptance and self-consistency add rigor without moving the headline number; future gains likely require bigger val set or non-LLM reasoning (graph traversal for 4-hop chains)."
   }
 }

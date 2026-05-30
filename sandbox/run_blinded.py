@@ -25,7 +25,51 @@ os.environ.setdefault("THERAPY_AGENT_LLM_BACKEND", "llama")
 
 import yaml  # noqa: E402
 
+from collections import Counter  # noqa: E402
+
 from therapy_agent.graph import run_agent  # noqa: E402
+
+
+async def run_agent_self_consistent(gene: str, mutation: str, disease_phenotype: str,
+                                    n_samples: int = 1):
+    """Run the full agent pipeline n_samples times and majority-vote on the
+    final target_protein. Returns the (vote-winning) final state.
+
+    Self-consistency on the FULL pipeline (not just Stage 2 of synthesis)
+    catches cases where the LLM picks different targets across independent
+    runs due to temperature, ordering of tool calls, or self-critique
+    realignment.
+    """
+    if n_samples <= 1:
+        return await run_agent(gene, mutation, disease_phenotype)
+
+    states = await asyncio.gather(*[
+        run_agent(gene, mutation, disease_phenotype)
+        for _ in range(n_samples)
+    ])
+    # Vote on the canonical HGNC symbol of the final target.
+    votes = Counter()
+    for st in states:
+        t = ((st.get("strategy") or {}).get("target_protein") or "").strip()
+        m = re.search(r"\b[A-Z][A-Z0-9]{1,9}\b", t)
+        canonical = (m.group(0) if m else t).upper()
+        if canonical:
+            votes[canonical] += 1
+    if not votes:
+        return states[0]
+    winner_canonical, _ = votes.most_common(1)[0]
+    # Return the first state whose canonical target matches the winner.
+    for st in states:
+        t = ((st.get("strategy") or {}).get("target_protein") or "").strip()
+        m = re.search(r"\b[A-Z][A-Z0-9]{1,9}\b", t)
+        canonical = (m.group(0) if m else t).upper()
+        if canonical == winner_canonical:
+            # Annotate the chosen state with the vote tally for downstream
+            # reporting (we add it as a top-level key the runner will pick up).
+            chosen = dict(st)
+            chosen["self_consistency_votes"] = dict(votes)
+            return chosen
+    return states[0]
 
 
 # ── locate the therapy-agent sibling repo ─────────────────────────────────────
@@ -106,27 +150,63 @@ def _symbols(text: str) -> set[str]:
 
 
 def score_target(predicted: str, expected: dict) -> dict:
-    """Three-tier target-overlap check, filtered against a non-HGNC blocklist."""
+    """Multi-target overlap check.
+
+    A prediction counts as recovered if it matches:
+      1. the curator's primary `target_protein` (exact / substring / symbol),
+      2. any non-generic alias in `target_aliases`, OR
+      3. any of the disease's other FDA-validated targets listed under
+         `valid_targets` (the multi-target set). This is the principled fix
+         for diseases like SCD (voxelotor / HBB vs Casgevy / BCL11A) or HAE
+         (Ekterly / KLKB1 vs Garadacimab / F12 vs Firazyr / BDKRB2). Any
+         FDA-approved target is a defensible answer.
+
+    `matched_via_kind` is one of {'primary', 'alias', 'valid_target'} so the
+    downstream report can distinguish "recovered the named drug's target"
+    from "recovered a different but FDA-validated target for the same
+    disease".
+    """
     pred = (predicted or "").lower()
     if not pred:
-        return {"recovered": False, "matched_via": None}
+        return {"recovered": False, "matched_via": None, "matched_via_kind": None}
+
     exp_target = (expected.get("target_protein") or "").lower()
-    aliases = [a.lower() for a in (expected.get("target_aliases") or [])]
     if exp_target and exp_target in pred:
-        return {"recovered": True, "matched_via": expected["target_protein"]}
-    # Aliases — but require the alias to look like a target token, not a
-    # generic strategy descriptor (e.g. "gene therapy" is too loose).
+        return {"recovered": True, "matched_via": expected["target_protein"],
+                "matched_via_kind": "primary"}
+
+    aliases = [a.lower() for a in (expected.get("target_aliases") or [])]
     for a in aliases:
         if not a:
             continue
         if a in pred and not _is_generic_alias(a):
-            return {"recovered": True, "matched_via": a}
+            return {"recovered": True, "matched_via": a,
+                    "matched_via_kind": "alias"}
+
     pred_symbols = _symbols(predicted or "")
     exp_symbols = _symbols(expected.get("target_protein") or "")
     common = pred_symbols & exp_symbols
     if common:
-        return {"recovered": True, "matched_via": next(iter(common))}
-    return {"recovered": False, "matched_via": None}
+        return {"recovered": True, "matched_via": next(iter(common)),
+                "matched_via_kind": "primary"}
+
+    # Multi-target acceptance: other FDA-validated targets for the same disease.
+    valid = [(v or "").lower() for v in (expected.get("valid_targets") or [])]
+    for vt in valid:
+        if not vt:
+            continue
+        if vt in pred and not _is_generic_alias(vt):
+            return {"recovered": True, "matched_via": vt,
+                    "matched_via_kind": "valid_target"}
+    # Symbol match against valid_targets too
+    for vt_raw in (expected.get("valid_targets") or []):
+        vt_symbols = _symbols(vt_raw)
+        common = pred_symbols & vt_symbols
+        if common:
+            return {"recovered": True, "matched_via": next(iter(common)),
+                    "matched_via_kind": "valid_target"}
+
+    return {"recovered": False, "matched_via": None, "matched_via_kind": None}
 
 
 _GENERIC_ALIASES = {
@@ -257,10 +337,11 @@ async def main_async(args) -> int:
 
         t0 = time.time()
         try:
-            state = await run_agent(
+            state = await run_agent_self_consistent(
                 gene=inp["gene"],
                 mutation=inp["mutation"],
                 disease_phenotype=inp["disease_phenotype"],
+                n_samples=args.self_consistency,
             )
             elapsed = time.time() - t0
             strat = state.get("strategy") or {}
@@ -306,6 +387,8 @@ async def main_async(args) -> int:
                 "predicted_citations": cits,
                 "target_recovered": target_ok["recovered"],
                 "target_matched_via": target_ok["matched_via"],
+                "target_matched_via_kind": target_ok.get("matched_via_kind"),
+                "self_consistency_votes": state.get("self_consistency_votes"),
                 "modality_recovered": modality_ok,
                 "citation_recovered": citation_ok,
                 "confidence_meets_min": conf_ok,
@@ -383,6 +466,10 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("blinded_results.json"))
     ap.add_argument("--baselines-only", action="store_true")
+    ap.add_argument("--self-consistency", type=int, default=1,
+                    help="Run the full pipeline N times per case and "
+                         "majority-vote the final target (default 1 = no "
+                         "self-consistency).")
     args = ap.parse_args()
     return asyncio.run(main_async(args))
 
