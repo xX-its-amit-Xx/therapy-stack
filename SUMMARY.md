@@ -69,6 +69,20 @@ The signal that survives the small-N caveat:
 | [`scripts/rationale_judge.py`](scripts/rationale_judge.py) | LLM-as-judge for rationale plausibility (orthogonal to target recovery) |
 | [`scripts/miss_taxonomy.py`](scripts/miss_taxonomy.py) | Classifies misses by failure mode (disease_gene_default / paralog / confabulation) |
 | [`scripts/frontier_plot.py`](scripts/frontier_plot.py) | ASCII Pareto frontier across runs (acc vs cost+wall) |
+| [`scripts/benchmark_lint.py`](scripts/benchmark_lint.py) | Schema + drug-name leakage check on YAML cases (CI gate) |
+| [`scripts/dataset_diversity.py`](scripts/dataset_diversity.py) | Per-split target_kind / modality / area distribution |
+| [`scripts/evidence_report.py`](scripts/evidence_report.py) | Self-contained HTML per-case evidence cards |
+| [`scripts/explain_case.py`](scripts/explain_case.py) | One-page markdown explanation of any single case |
+| [`scripts/pattern_distribution.py`](scripts/pattern_distribution.py) | Stage-1 pattern picks across a run (flags pattern collapse) |
+| [`scripts/pattern_collapse_check.py`](scripts/pattern_collapse_check.py) | CI gate: fail if any Stage-1 pattern dominates >60% |
+| [`scripts/rationale_pattern_check.py`](scripts/rationale_pattern_check.py) | Static check: rationale text consistent with picked pattern |
+| [`scripts/node_contribution.py`](scripts/node_contribution.py) | Per-node LLM-call + token economy (hit/miss split) |
+| [`scripts/preflight.py`](scripts/preflight.py) | One-line gate: pytest + lint + diversity + baselines before a bench |
+| [`scripts/release_readiness.py`](scripts/release_readiness.py) | Pre-tag drift check (CHANGELOG freshness, markdown link integrity) |
+| [`scripts/sandbox_manifest.py`](scripts/sandbox_manifest.py) | Index of every `blinded_*.json` + companion report |
+| [`sandbox/DIVERSITY.md`](sandbox/DIVERSITY.md) | Latest dataset diversity snapshot |
+| [`sandbox/COST_FRONTIER.md`](sandbox/COST_FRONTIER.md) | Latest cost-vs-accuracy frontier |
+| [`sandbox/MANIFEST.md`](sandbox/MANIFEST.md) | Latest index of result files + reports |
 | [`RUNBOOK.md`](RUNBOOK.md) | On-call doc: splits, run commands, regression-check semantics, common failure modes, quarterly val rotation |
 
 ## Where to read next
