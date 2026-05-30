@@ -61,9 +61,12 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install pyyaml pandas pyarrow requests httpx tenacity \
-            python-dotenv langgraph langchain-core pydantic typer rich
+            python-dotenv langgraph langchain-core pydantic typer rich pytest
           pip install -e ./fda-strategy-triples --no-deps
           pip install -e ./therapy-agent --no-deps
+
+      - name: Unit tests (scoring + helpers)
+        run: pytest tests/ -v
 
       - name: Validate YAML benchmarks parse
         working-directory: sandbox
