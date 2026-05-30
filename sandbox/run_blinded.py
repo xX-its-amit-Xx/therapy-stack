@@ -39,6 +39,12 @@ async def run_agent_self_consistent(gene: str, mutation: str, disease_phenotype:
     catches cases where the LLM picks different targets across independent
     runs due to temperature, ordering of tool calls, or self-critique
     realignment.
+
+    The chosen state's `strategy.confidence_score` is REPLACED by the vote
+    margin (winner_votes / n_samples). v0.8's calibration analysis found
+    the LLM's self-reported confidence has ECE 0.2-0.4 (poorly calibrated,
+    systematically under-confident). Vote-margin confidence is more honest
+    -- it directly reflects how often N independent samples agreed.
     """
     if n_samples <= 1:
         return await run_agent(gene, mutation, disease_phenotype)
@@ -57,17 +63,27 @@ async def run_agent_self_consistent(gene: str, mutation: str, disease_phenotype:
             votes[canonical] += 1
     if not votes:
         return states[0]
-    winner_canonical, _ = votes.most_common(1)[0]
+    winner_canonical, winner_n = votes.most_common(1)[0]
+    vote_margin = winner_n / n_samples  # 3/3 -> 1.0; 2/3 -> 0.67; 1/3 -> 0.33
+
     # Return the first state whose canonical target matches the winner.
     for st in states:
         t = ((st.get("strategy") or {}).get("target_protein") or "").strip()
         m = re.search(r"\b[A-Z][A-Z0-9]{1,9}\b", t)
         canonical = (m.group(0) if m else t).upper()
         if canonical == winner_canonical:
-            # Annotate the chosen state with the vote tally for downstream
-            # reporting (we add it as a top-level key the runner will pick up).
             chosen = dict(st)
             chosen["self_consistency_votes"] = dict(votes)
+            # Replace LLM self-reported confidence with the vote margin,
+            # which is empirically better calibrated.
+            strat = dict(chosen.get("strategy") or {})
+            strat["confidence_score"] = vote_margin
+            strat["confidence_source"] = f"vote_margin({winner_n}/{n_samples})"
+            chosen["strategy"] = strat
+            final_strat = dict(chosen.get("final_strategy") or strat)
+            final_strat["confidence_score"] = vote_margin
+            final_strat["confidence_source"] = f"vote_margin({winner_n}/{n_samples})"
+            chosen["final_strategy"] = final_strat
             return chosen
     return states[0]
 
