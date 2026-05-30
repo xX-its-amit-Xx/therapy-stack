@@ -24,12 +24,12 @@
   },
   "val": {
     "n_cases": 6,
-    "target_recovered": 3,
-    "hard_recovered": 0,
+    "target_recovered": 4,
+    "hard_recovered": 1,
     "total_seconds_max": 3500,
-    "model": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M",
-    "pipeline": "v0.5",
+    "model": "GPT-4o (OpenAI) with tool-use agentic loop",
+    "pipeline": "v0.6 (v0.5 + agentic_target_research ReAct node)",
     "date": "2026-05-29",
-    "notes": "Post-2024 FDA approvals (Resmetirom 2024-03, Vorasidenib 2024-08, Sotatercept 2024-03, Mavorixafor 2024-04, Crinecerfont 2024-12, Garadacimab 2025-06). All 3 easy cases recovered (target == disease gene); all 3 hard cases missed -- this is the honest generalization number. Agent ties the disease-gene baseline at 3/6. The 'reasoning' visible on dev does not transfer cleanly when the training data hasn't been seen."
+    "notes": "Tool-use loop (agentic_target_research node) was added 2026-05-29. With it: 4/6 val (1/3 hard). Specifically recovered Garadacimab F12 (cascade disambiguation) and Resmetirom THRB (adjacency-correction). R1-Distill 8B without tools: 3/6 val (0/3 hard). GPT-4o without tools: 2/6 val (0/3 hard). The tool-use loop is the unlock; the frontier model alone was not."
   }
 }

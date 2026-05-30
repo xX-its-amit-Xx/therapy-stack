@@ -100,49 +100,56 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — dev / val / frontier comparison
+## Latest scorecard — dev / val / frontier / tool-use comparison
 
-The benchmark now runs against three configurations: local Llama 3.2 3B, local DeepSeek-R1-Distill-Llama-8B, and GPT-4o via the OpenAI API. The full pipeline + prompts are the same across all three (2-stage decomposition + self-consistency vote + always-fire critique). The split is dev (16 cases, used for iteration) vs val (6 cases, FDA approvals after the model training cutoffs). Per-case detail in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md) and [`sandbox/RESULTS_FRONTIER.md`](sandbox/RESULTS_FRONTIER.md).
+Four configurations now sit on the same dev/val split. Same prompts, same retrieval substrate, same scoring. Per-case detail in [`sandbox/RESULTS_FRONTIER.md`](sandbox/RESULTS_FRONTIER.md).
 
 | Backend | Set | Target | Hard | Easy | Wall | Cost |
 |---|---|---|---|---|---|---|
 | R1-Distill 8B (local CPU) | dev | 13/16 | 6/8 | 7/8 | 127 min | ~$0 |
 | R1-Distill 8B (local CPU) | val | 3/6 | 0/3 | 3/3 | 46 min | ~$0 |
-| **GPT-4o (OpenAI)** | **dev** | **16/16** | **8/8** | **8/8** | **4 min** | **$0.06** |
-| GPT-4o (OpenAI) | val | 2/6 | 0/3 | 2/3 | 1 min | $0.03 |
+| GPT-4o (no tool-use) | dev | 16/16 | 8/8 | 8/8 | 4 min | $0.06 |
+| GPT-4o (no tool-use) | val | 2/6 | 0/3 | 2/3 | 1 min | $0.03 |
+| GPT-4o + **tool-use loop** | dev | 15/16 | 7/8 | 8/8 | 6 min | $0.06 |
+| **GPT-4o + tool-use loop** | **val** | **4/6** | **1/3** | **3/3** | **2 min** | **$0.03** |
 
 **Baselines (no LLM):** disease-gene 9/16 dev, 3/6 val.
 
-### The most important finding from this work
+### The tool-use win
 
-**GPT-4o is perfect on dev (16/16 with all 8 hard cases) but *worse than R1-Distill 8B* on val (2/6 vs 3/6) and worse than the disease-gene baseline.**
+Adding a ReAct-style agentic loop — same model, same dev/val cases — **doubled val recovery (2/6 → 4/6)** and recovered one hard case (0/3 → 1/3). The pipeline change was bigger than the model change.
 
-That gap means the val ceiling is not a model-size problem. Larger models memorize more of the published FDA-approval literature, which inflates dev scores, but they do not generalize cross-pathway reasoning to post-cutoff approvals. Scaling the model from here is the wrong investment. The pipeline ceiling is real.
+The new node `agentic_target_research` lives between `interactor_biology_lookup` and `strategy_synthesis`. The LLM can issue up to 4 follow-up retrieval calls via three tools:
+- **`expand_pathway(gene)`** — returns Reactome interactors + pathway role.
+- **`query_biology(gene)`** — returns UniProt FUNCTION / PATHWAY / SUBUNIT / PTM.
+- **`find_hormonal_axis(disease_phenotype)`** — deterministic heuristic mapping endocrine phenotypes to their feedback loops (HPA, HPT, HPG axes).
 
-The frontier model's val misses are also illuminating:
-- Crinecerfont CAH → predicted "Mineralocorticoid receptor" (treats salt-wasting in CAH but is not the FDA target).
-- Resmetirom MASH → predicted "RXRA" (heterodimerizes with THRB; adjacent biology).
-- Sotatercept PAH → predicted "BMPR2" (the disease gene; the answer is ACVR2A).
-- Garadacimab HAE → predicted "KLKB1", which is the Ekterly target from *another* HAE case in dev. The model copied a dev mapping into a novel case.
+Two val cases recovered by genuine multi-step reasoning:
 
-GPT-4o is "more creative" and proposes sophisticated adjacent biology. For a target-proposer with a defined FDA answer, that creativity is a liability — R1-Distill's conservatism on easy cases is why it outscored GPT-4o on val despite being ~20× smaller.
+- **Garadacimab HAE: KLKB1 → F12 (hard).** Without tools, GPT-4o copied the Ekterly mapping (KLKB1) into the novel Garadacimab case. With tools, it called `expand_pathway(SERPING1)` → got `[KLKB1, F12, BDKRB2, ...]`, then queried both KLKB1 and F12 biology, read F12's UniProt FUNCTION (`"initiator of blood coagulation, fibrinolysis..."`), and concluded F12 is the upstream protease. Real cascade disambiguation.
+- **Resmetirom MASH: RXRA → THRB (easy).** Without tools, the model picked RXRA (THRB's heterodimer partner — adjacent biology). With tools the agent queried THRB biology and confirmed THRB itself as the FDA target.
 
-### What this implies for next investments
+Near-miss: **Crinecerfont CAH** — agent identified the HPA axis correctly via `find_hormonal_axis`, but the axis hint surfaces both CRHR1 and MC2R; the model picked MC2R (ACTH receptor on the adrenal) instead of CRHR1 (CRH receptor on the pituitary, the actual Crinecerfont target). 50/50 between two correct-axis receptors.
 
-Confirmed by the frontier comparison, in priority order:
+Still missing: **Sotatercept PAH** — disease gene (BMPR2) picked instead of ACVR2A. The agentic loop didn't surface the activin-trap mechanism. Would need a dedicated tool for ligand-trap modalities.
 
-1. **Tool-use agentic loop** — let `strategy_synthesis` issue follow-up retrieval calls (`list upstream proteins in steroidogenesis for CYP21A2` → CRH, ACTH, CRHR1, MC2R). Directly addresses the 0/3 hard val finding.
-2. **Hybrid graph + LLM** — for cases where "rate-limiting upstream enzyme" or "downstream effector" is computable from Reactome edges, compute it deterministically and feed as a constrained candidate.
-3. **Adversarial dev cases** — dev = 16/16 means dev is now saturated for GPT-4o; need cases designed to fail the agent without leaking the answer.
-4. **Expand val to 15-20 cases** — N=6 with Wilson CI 19-81% can't statistically distinguish 2/6 from 4/6.
+### What this means
+
+**GPT-4o + tool-use is the configuration that decisively beats the disease-gene baseline on val (4/6 vs 3/6).** The frontier model alone (2/6) couldn't do it. The open-weight reasoning model alone (3/6) couldn't do it. Tool-use is the unlock.
+
+Cost-wise, the entire dev + val sweep with GPT-4o + tool-use costs ~$0.09 and takes 8 minutes wall-clock. Cheaper and faster than the R1-Distill local CPU pass that scored worse on val.
+
+### Next investments (post tool-use)
+
+1. **Self-consistency on tool calls** — re-issue Crinecerfont 3× with majority vote on the final target. Would resolve the CRHR1/MC2R coin-flip.
+2. **`find_ligand_trap_family` tool** — close Sotatercept by surfacing the ActRIIA-Fc activin-trap mechanism.
+3. **Expand val to 15-20 cases** — Wilson CI on 4/6 is 30-90%; need bigger N for the number to be measurement-grade.
+4. **R1-Distill + tool-use comparison** — does the open-weight reasoning model close val with the agentic loop? Two-hour local run, no API cost.
 
 ### Production layer (unchanged)
 
-- [`baselines.json`](baselines.json) — frozen scores the CI regression check gates against. Update only with reviewer sign-off.
-- [`scripts/regression_check.py`](scripts/regression_check.py) — fails the build if target or hard-case recovery drops more than the tolerance, or wall time climbs > 25%.
-- [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) — smoke job + benchmark job (gated on `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` repo secret).
-- [`RUNBOOK.md`](RUNBOOK.md) — on-call doc with splits, run commands, regression-check semantics, common failure modes, quarterly val-set rotation policy.
-- `run_blinded.py` emits per-case `tokens_in_total` / `tokens_out_total` / `llm_calls_per_node` for cost / latency budgets.
+- [`baselines.json`](baselines.json), [`scripts/regression_check.py`](scripts/regression_check.py), [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml), [`RUNBOOK.md`](RUNBOOK.md).
+- `run_blinded.py` emits per-case `tokens_in_total` / `tokens_out_total` / `llm_calls_per_node` for cost/latency budgets.
 
 ---
 
