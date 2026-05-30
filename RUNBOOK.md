@@ -112,3 +112,49 @@ serving layer.
 Every PR's CI run uploads `dev_results.json` and `val_results.json` as
 GitHub artifacts with 30-day retention. To audit a historical claim
 ("the 13/16 number from commit X"), pull the matching artifact.
+
+## 10. Observability tools (v0.8+)
+
+Beyond regression_check, the repo ships three orthogonal analysis tools:
+
+- **`scripts/run_diff.py`** -- side-by-side per-case diff between two
+  result JSONs. Headline: `DIFF: +N cases | regressed=A recovered=B ...`.
+  Used in CI to post a sticky PR comment showing exactly which cases
+  changed. Exit code 1 if any regressions found (intended for CI
+  gating).
+
+- **`scripts/calibration.py`** -- Expected Calibration Error + Brier
+  + bin-by-bin gap analysis. Tells you whether the agent's confidence
+  tracks accuracy. Current finding (v0.8): the agent is consistently
+  UNDER-confident (claims ~0.3, recovers ~86%); confidence should not
+  be used as a "flag for human review" gate.
+
+  When `--self-consistency >= 2` is used at run time,
+  `strategy.confidence_score` is REPLACED with the vote margin
+  (winner_votes / n_samples), which is empirically better calibrated.
+  `strategy.confidence_source = "vote_margin(2/3)"` carries provenance.
+
+- **`scripts/rationale_judge.py`** -- LLM-as-judge for rationale
+  plausibility (0-3 scale: contradicts / irrelevant / adjacent /
+  canonical). Orthogonal to target_recovery. Useful for surfacing
+  agent confabulation and for finding "agent picked a defensible
+  target the YAML didn't list" cases. Cost ~$0.005 per case on
+  gpt-4o-mini; run on demand, not every PR.
+
+The intent: target_recovery is the headline metric; calibration,
+plausibility, and per-case diffs are the diagnostic signals a
+production team needs to know WHY a number changed.
+
+## 11. Adversarial test set (`benchmarks/adversarial/`)
+
+In addition to dev and val, the adversarial set holds cases hand-crafted
+to fail an agent that has the wrong inductive bias on a documented
+failure mode (paralog confusion, lazy multi-target acceptance,
+field-rationale decoupling, etc.). Each case has a NARROW
+`valid_targets` set and the phenotype framing is engineered to make
+naive-default answers wrong.
+
+Adversarial scores are tracked SEPARATELY from dev/val (different
+curation philosophy; don't aggregate). A drop in adversarial recovery
+is a signal that a recent change weakened a specific behavior; cross-
+reference with the failure mode the case was designed to probe.
