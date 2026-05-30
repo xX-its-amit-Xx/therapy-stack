@@ -20,6 +20,9 @@ didn't exist yet at that version.
 | v0.8 (this round) | 2026-05-30 | 10/16 (R1-Distill SC1) | 9/12 (3H) | 1/4 | cache + field_rationale_align + 6 new val + pathway_neighbors + valid_targets + vote-margin confidence + adversarial set + observability stack |
 | v0.9 (this round) | 2026-05-30 | tbd | tbd | tbd | disease_gene_default guard (targeted at the dominant val failure mode) |
 | v0.9.1 (this round) | 2026-05-30 | tbd | tbd | tbd | pattern 9 (feedback_axis_receptor) + phenotype-pattern consistency override + extended guard kinds. Crinecerfont smoke blocked on RAM (Windsurf editor 10GB; only 3.8GB avail to load 5GB R1-Distill); to be re-measured on next clean run. |
+| v0.9.2 (this round) | 2026-05-30 | tbd | tbd | tbd | Hard pattern override (skips Stage 1 re-prompt; force pattern_id=9). Crinecerfont smoke STILL missed -- Stage 1 LLM JSON parse was failing and target_kind was empty so the override gate didn't fire. |
+| v0.9.2b (this round) | 2026-05-30 | tbd | tbd | tbd | Unconditional override on phenotype markers regardless of Stage 1 result. Crinecerfont smoke MOVED off disease-gene-default: predicted NR3C1 (glucocorticoid receptor) instead of CYP21A2. Right pattern category (feedback_axis_receptor), wrong specific receptor (NR3C1 vs CRHR1). DG-default rate 100% → 0% on this case. |
+| v0.9.3 (this round) | 2026-05-30 | tbd | tbd | tbd | Mechanism-pattern guard: if mechanism=lof and Stage 1 picks disease_gene_mRNA, force downstream_effector. Targets the Iptacopan/PNH miss class. LLM-free unit tests verify guard fires correctly. |
 
 ## Lever-by-lever summary
 
