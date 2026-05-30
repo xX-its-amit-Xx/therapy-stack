@@ -100,45 +100,49 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — dev set + held-out post-2024 val set
+## Latest scorecard — dev / val / frontier comparison
 
-Production-grade evaluation now has two splits.
+The benchmark now runs against three configurations: local Llama 3.2 3B, local DeepSeek-R1-Distill-Llama-8B, and GPT-4o via the OpenAI API. The full pipeline + prompts are the same across all three (2-stage decomposition + self-consistency vote + always-fire critique). The split is dev (16 cases, used for iteration) vs val (6 cases, FDA approvals after the model training cutoffs). Per-case detail in [`sandbox/RESULTS_BLINDED.md`](sandbox/RESULTS_BLINDED.md) and [`sandbox/RESULTS_FRONTIER.md`](sandbox/RESULTS_FRONTIER.md).
 
-| Split | Cases | Source | Use |
-|---|---|---|---|
-| **dev** | 16 | `therapy-agent/benchmarks/{*.yaml, cases/*.yaml}` | Iterate prompts + retrieval; overfit risk is real |
-| **val** | 6 | `therapy-agent/benchmarks/heldout_2024_2025/*.yaml` | FDA approvals **after** every current open-weight model's training cutoff. Never touched during iteration. |
+| Backend | Set | Target | Hard | Easy | Wall | Cost |
+|---|---|---|---|---|---|---|
+| R1-Distill 8B (local CPU) | dev | 13/16 | 6/8 | 7/8 | 127 min | ~$0 |
+| R1-Distill 8B (local CPU) | val | 3/6 | 0/3 | 3/3 | 46 min | ~$0 |
+| **GPT-4o (OpenAI)** | **dev** | **16/16** | **8/8** | **8/8** | **4 min** | **$0.06** |
+| GPT-4o (OpenAI) | val | 2/6 | 0/3 | 2/3 | 1 min | $0.03 |
 
-Best configuration: **DeepSeek-R1-Distill-Llama-8B + v0.5 pipeline** (2-stage decomposition + self-consistency vote + always-fire critique), CPU only, no API key.
+**Baselines (no LLM):** disease-gene 9/16 dev, 3/6 val.
 
-| Metric | Dev (16) | Val (6, post-2024) | Notes |
-|---|---|---|---|
-| Target recovery | 13 / 16 (81%) | **3 / 6 (50%)** | Wilson 95% CI val: 19-81% |
-| Hard cases (target != disease gene) | 6 / 8 | **0 / 3** | The honest finding -- reasoning does not generalize |
-| Easy cases (target == disease gene) | 7 / 8 | 3 / 3 | Disease-gene mapping recovers cleanly |
-| Modality also correct | 11 / 16 | 5 / 6 | Modality crosswalk is robust |
-| Baseline: predict-disease-gene | 9 / 16 | 3 / 6 | Agent ties baseline on val |
-| Wall time | 127 min | 46 min | R1-Distill on 8-core CPU |
+### The most important finding from this work
 
-### What the val number actually means
+**GPT-4o is perfect on dev (16/16 with all 8 hard cases) but *worse than R1-Distill 8B* on val (2/6 vs 3/6) and worse than the disease-gene baseline.**
 
-The 13/16 on dev was real but optical. Every model with a training cutoff in or before 2024 has very likely seen the mappings for PCSK9, SOD1, BCL11A, ALAS1, EGFR, BRAF, HER2, TNF, etc. -- the dev set is largely a fitting / memorization test. The val set is six FDA approvals from **2024-03 through 2025-06** (Resmetirom, Vorasidenib, Sotatercept, Mavorixafor, Crinecerfont, Garadacimab). On those: all three target-equals-disease-gene cases (Resmetirom/THRB, Vorasidenib/IDH1, Mavorixafor/CXCR4) recovered cleanly. **All three cross-pathway cases missed**:
+That gap means the val ceiling is not a model-size problem. Larger models memorize more of the published FDA-approval literature, which inflates dev scores, but they do not generalize cross-pathway reasoning to post-cutoff approvals. Scaling the model from here is the wrong investment. The pipeline ceiling is real.
 
-- **Sotatercept** (BMPR2 disease gene → ACVR2A target): model predicted BMPR2 (the disease gene). Correct chain is "BMP/activin imbalance → ActRIIA-Fc fusion traps activin ligands". 3-hop reasoning the model didn't do.
-- **Crinecerfont** (CYP21A2 → CRHR1): model predicted CYP21A2 (the disease gene). Correct chain is "cortisol low → ACTH high → adrenal androgen excess → block CRH receptor upstream of ACTH". 4-hop hormonal-feedback reasoning.
-- **Garadacimab** (SERPING1 → F12): model predicted KLKB1. KLKB1 is the right answer for the *other* HAE drug in dev (Ekterly/sebetralstat). The model learned the dev mapping and applied it to a related case where the actual answer is the adjacent F12 protease in the same cascade.
+The frontier model's val misses are also illuminating:
+- Crinecerfont CAH → predicted "Mineralocorticoid receptor" (treats salt-wasting in CAH but is not the FDA target).
+- Resmetirom MASH → predicted "RXRA" (heterodimerizes with THRB; adjacent biology).
+- Sotatercept PAH → predicted "BMPR2" (the disease gene; the answer is ACVR2A).
+- Garadacimab HAE → predicted "KLKB1", which is the Ekterly target from *another* HAE case in dev. The model copied a dev mapping into a novel case.
 
-### The production interpretation
+GPT-4o is "more creative" and proposes sophisticated adjacent biology. For a target-proposer with a defined FDA answer, that creativity is a liability — R1-Distill's conservatism on easy cases is why it outscored GPT-4o on val despite being ~20× smaller.
 
-The agent learned reasoning *templates* from dev that work when the answer is in training data, but does not transfer those templates to genuinely novel cross-pathway cases. The 0/3 on val hard cases is consistent with "the model retrieves and rationalises known mappings; it does not derive novel ones." For a production deployment this is a load-bearing finding: the agent is useful as a suggestion / explanation surface on familiar biology, **not** as a novel-target proposer.
+### What this implies for next investments
 
-### Production layer
+Confirmed by the frontier comparison, in priority order:
 
-- [`baselines.json`](baselines.json) -- frozen scores the CI regression check gates against. Update only with reviewer sign-off.
-- [`scripts/regression_check.py`](scripts/regression_check.py) -- compares a fresh run to `baselines.json`; fails the build if target recovery drops more than the tolerance, hard-case recovery drops, or wall time climbs >25%.
-- [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) -- smoke job (YAML validation + baselines, always runs); benchmark job (Claude via API, runs when `ANTHROPIC_API_KEY` secret is set).
-- [`RUNBOOK.md`](RUNBOOK.md) -- on-call doc: splits, run commands, regression-check semantics, common failure modes, quarterly val-set rotation.
-- `run_blinded.py` now emits per-case `tokens_in_total` / `tokens_out_total` / `llm_calls_per_node` for cost/latency budgets.
+1. **Tool-use agentic loop** — let `strategy_synthesis` issue follow-up retrieval calls (`list upstream proteins in steroidogenesis for CYP21A2` → CRH, ACTH, CRHR1, MC2R). Directly addresses the 0/3 hard val finding.
+2. **Hybrid graph + LLM** — for cases where "rate-limiting upstream enzyme" or "downstream effector" is computable from Reactome edges, compute it deterministically and feed as a constrained candidate.
+3. **Adversarial dev cases** — dev = 16/16 means dev is now saturated for GPT-4o; need cases designed to fail the agent without leaking the answer.
+4. **Expand val to 15-20 cases** — N=6 with Wilson CI 19-81% can't statistically distinguish 2/6 from 4/6.
+
+### Production layer (unchanged)
+
+- [`baselines.json`](baselines.json) — frozen scores the CI regression check gates against. Update only with reviewer sign-off.
+- [`scripts/regression_check.py`](scripts/regression_check.py) — fails the build if target or hard-case recovery drops more than the tolerance, or wall time climbs > 25%.
+- [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) — smoke job + benchmark job (gated on `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` repo secret).
+- [`RUNBOOK.md`](RUNBOOK.md) — on-call doc with splits, run commands, regression-check semantics, common failure modes, quarterly val-set rotation policy.
+- `run_blinded.py` emits per-case `tokens_in_total` / `tokens_out_total` / `llm_calls_per_node` for cost / latency budgets.
 
 ---
 
