@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>therapy-stack evidence: blinded_v20_adv_llama.json</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       Roboto, "Helvetica Neue", sans-serif; max-width: 1100px;
+       margin: 2em auto; padding: 0 1em; color: #1a1a1a; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 1.5em; }
+.summary { background: #f4f6f8; padding: 1em; border-radius: 6px;
+           border: 1px solid #ddd; }
+.summary table { border-collapse: collapse; }
+.summary td { padding: 0.2em 0.6em; }
+.case { border: 1px solid #ddd; border-radius: 6px; padding: 1em;
+        margin-bottom: 1em; background: #fff; }
+.case.hit { border-left: 6px solid #2e7d32; }
+.case.miss { border-left: 6px solid #c62828; }
+.case h3 { margin: 0 0 0.4em 0; font-size: 1.05em; }
+.case .pred { background: #f9fbfd; padding: 0.6em 0.8em;
+              border-left: 3px solid #1565c0; margin: 0.5em 0; }
+.case .exp { background: #faf4f4; padding: 0.6em 0.8em;
+             border-left: 3px solid #c62828; margin: 0.5em 0; }
+.case .rat { color: #444; font-style: italic; padding: 0.4em 0;
+             border-top: 1px dashed #ddd; margin-top: 0.5em; }
+.case .meta { color: #666; font-size: 0.85em; margin-top: 0.6em; }
+.tag { display: inline-block; padding: 0.1em 0.5em; border-radius: 4px;
+       font-size: 0.8em; margin-right: 0.4em; }
+.tag.hit { background: #c8e6c9; color: #1b5e20; }
+.tag.miss { background: #ffcdd2; color: #b71c1c; }
+.tag.info { background: #e3f2fd; color: #0d47a1; }
+.kv { display: grid; grid-template-columns: 140px 1fr; gap: 0.2em 0.8em; }
+.kv dt { color: #555; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>therapy-stack evidence trace</h1>
+<p>One card per blinded case. Green-left = target recovered;
+red-left = target missed. Look at the rationale to judge whether
+the agent picked the right target for the right reason -- or got
+lucky with a disease-gene-default heuristic that happened to match.</p>
+
+<div class='summary'>
+  <table>
+    <tr><td>source</td><td><code>blinded_v20_adv_llama.json</code></td></tr>
+    <tr><td>backend</td><td>llama</td></tr>
+    <tr><td>model</td><td><code>C:/llama-models/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf</code></td></tr>
+    <tr><td>cases</td><td>4</td></tr>
+    <tr><td>target recovered</td><td>1/4 (25%)
+            -- Wilson 95% CI [5%, 70%]</td></tr>
+    <tr><td>modality recovered</td><td>2/4</td></tr>
+    <tr><td>citation recovered</td><td>0/4</td></tr>
+    <tr><td>total wall</td><td>2391.4s (39.9 min)</td></tr>
+  </table>
+</div>
+
+<h2>Per-case evidence (N = 4)</h2>
+
+<div class='case hit'>
+  <h3>adversarial_hae_acute &middot; gene=SERPING1 &middot; target_exp=BDKRB2</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> BDKRB2
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> BDKRB2
+    &middot; aliases=[BDKRB2, bradykinin B2 receptor, icatibant, Firazyr]
+    &middot; matched_via=BDKRB2 (primary)
+  </div>
+  <div class='rat'>BDKRB2 is a downstream effector in the bradykinin pathway, which is relevant to the acute treatment of hereditary angioedema. It acts as a receptor for bradykinin, playing a role in inflammation and swelling, making it a potential target for managing acute symptoms.</div>
+  
+  <div class='meta'>elapsed=674.3s &middot; tokens in/out=600/780 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>adversarial_dmd_utrn &middot; gene=DMD &middot; target_exp=DMD</h3>
+  <span class="tag miss">target missed</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> DAG1
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> DMD
+    &middot; aliases=[dystrophin, DMD, eteplirsen, exon 51, Exondys, golodirsen...]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>DAG1 is part of the dystrophin-glycoprotein complex and acts as a receptor for extracellular matrix proteins, facilitating signaling events. It serves as a structural component that interacts with dystrophin, supporting its role in linking the actin cytoskeleton to the extracellular matrix. This makes DAG1 a downstream effector and a potential target for therapeutic intervention.</div>
+  
+  <div class='meta'>elapsed=656.7s &middot; tokens in/out=635/682 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>adversarial_scd_bcl11a &middot; gene=HBB &middot; target_exp=BCL11A</h3>
+  <span class="tag miss">target missed</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> KLF1
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.50
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> BCL11A
+    &middot; aliases=[BCL11A, BCL11A erythroid enhancer, exa-cel, Casgevy, HBG1, HBG2...]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>KLF1 is a transcription regulator critical for beta-globin expression. It acts as a downstream effector in the pathway, activating the expression of beta-globin genes, which is essential for proper hemoglobin production. This fits the pattern of a downstream receptor agonist, as KLF1 activates the beta-globin gene, indirectly affecting the disease phenotype.</div>
+  
+  <div class='meta'>elapsed=635.4s &middot; tokens in/out=654/717 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>adversarial_cah_simple_virilizing &middot; gene=CYP21A2 &middot; target_exp=CRHR1</h3>
+  <span class="tag miss">target missed</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> CYP21A2 (mRNA)
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.80
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> CRHR1
+    &middot; aliases=[CRHR1, CRH receptor, CRF1, crinecerfont, Crenessity]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>CYP21A2 is the disease gene responsible for congenital adrenal hyperplasia type 3 (AH3). It catalyzes the hydroxylation steps in mineralocorticoid biosynthesis, and its dysfunction leads to hyperandrogenism and partial cortisol deficiency. Given the target kind &#x27;disease_gene_mRNA&#x27;, the target protein must be the mRNA of the disease gene, which is CYP21A2. Additionally, CYP21A2 is druggable with 46 active compounds, making it a suitable target for therapeutic intervention.</div>
+  
+  <div class='meta'>elapsed=425.0s &middot; tokens in/out=753/481 &middot; LLM calls=self_critique:1</div>
+</div>
+
+</body></html>

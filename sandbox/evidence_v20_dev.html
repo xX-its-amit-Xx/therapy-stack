@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>therapy-stack evidence: blinded_v20_dev_llama.json</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       Roboto, "Helvetica Neue", sans-serif; max-width: 1100px;
+       margin: 2em auto; padding: 0 1em; color: #1a1a1a; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 1.5em; }
+.summary { background: #f4f6f8; padding: 1em; border-radius: 6px;
+           border: 1px solid #ddd; }
+.summary table { border-collapse: collapse; }
+.summary td { padding: 0.2em 0.6em; }
+.case { border: 1px solid #ddd; border-radius: 6px; padding: 1em;
+        margin-bottom: 1em; background: #fff; }
+.case.hit { border-left: 6px solid #2e7d32; }
+.case.miss { border-left: 6px solid #c62828; }
+.case h3 { margin: 0 0 0.4em 0; font-size: 1.05em; }
+.case .pred { background: #f9fbfd; padding: 0.6em 0.8em;
+              border-left: 3px solid #1565c0; margin: 0.5em 0; }
+.case .exp { background: #faf4f4; padding: 0.6em 0.8em;
+             border-left: 3px solid #c62828; margin: 0.5em 0; }
+.case .rat { color: #444; font-style: italic; padding: 0.4em 0;
+             border-top: 1px dashed #ddd; margin-top: 0.5em; }
+.case .meta { color: #666; font-size: 0.85em; margin-top: 0.6em; }
+.tag { display: inline-block; padding: 0.1em 0.5em; border-radius: 4px;
+       font-size: 0.8em; margin-right: 0.4em; }
+.tag.hit { background: #c8e6c9; color: #1b5e20; }
+.tag.miss { background: #ffcdd2; color: #b71c1c; }
+.tag.info { background: #e3f2fd; color: #0d47a1; }
+.kv { display: grid; grid-template-columns: 140px 1fr; gap: 0.2em 0.8em; }
+.kv dt { color: #555; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>therapy-stack evidence trace</h1>
+<p>One card per blinded case. Green-left = target recovered;
+red-left = target missed. Look at the rationale to judge whether
+the agent picked the right target for the right reason -- or got
+lucky with a disease-gene-default heuristic that happened to match.</p>
+
+<div class='summary'>
+  <table>
+    <tr><td>source</td><td><code>blinded_v20_dev_llama.json</code></td></tr>
+    <tr><td>backend</td><td>llama</td></tr>
+    <tr><td>model</td><td><code>C:/llama-models/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf</code></td></tr>
+    <tr><td>cases</td><td>16</td></tr>
+    <tr><td>target recovered</td><td>10/16 (62%)
+            -- Wilson 95% CI [39%, 82%]</td></tr>
+    <tr><td>modality recovered</td><td>8/16</td></tr>
+    <tr><td>citation recovered</td><td>2/16</td></tr>
+    <tr><td>total wall</td><td>8868.0s (147.8 min)</td></tr>
+  </table>
+</div>
+
+<h2>Per-case evidence (N = 16)</h2>
+
+<div class='case miss'>
+  <h3>brd4780_umod &middot; gene=UMOD &middot; target_exp=TMED9</h3>
+  <span class="tag miss">target missed</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> HSPA5
+    &middot; modulation=inhibitor
+    &middot; mechanism=misfolding
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> TMED9
+    &middot; aliases=[TMED9, TMED2, TMED10, cargo receptor, TMED]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>HSPA5 is a chaperone involved in the folding and quality control of UMOD in the endoplasmic reticulum. It plays a critical role in managing misfolded UMOD, which leads to its retention in the ER and subsequent disease progression. HSPA5 is druggable, making it a potential therapeutic target.</div>
+  
+  <div class='meta'>elapsed=666.1s &middot; tokens in/out=640/668 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>ekterly_serping1 &middot; gene=SERPING1 &middot; target_exp=KLKB1</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> KLKB1
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> KLKB1
+    &middot; aliases=[plasma kallikrein, KLKB1, kallikrein B1]
+    &middot; matched_via=KLKB1 (primary)
+  </div>
+  <div class='rat'></div>
+  
+  <div class='meta'>elapsed=620.5s &middot; tokens in/out=501/604 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>als_sod1 &middot; gene=SOD1 &middot; target_exp=SOD1</h3>
+  <span class="tag miss">target missed</span><span class="tag miss">modality miss</span><span class="tag hit">cite OK</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> CCS
+    &middot; modulation=inhibitor
+    &middot; mechanism=misfolding
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> SOD1
+    &middot; aliases=[SOD1, tofersen, Qalsody, antisense oligonucleotide]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>CCS is a downstream effector in the pathway involving SOD1. It delivers copper to SOD1, which is essential for its catalytic activity. Mutations or dysfunction in CCS can impair SOD1 function, leading to misfolding and aggregates, contributing to the disease phenotype.</div>
+  
+  <div class='meta'>elapsed=615.7s &middot; tokens in/out=601/675 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>dmd_exon51 &middot; gene=DMD &middot; target_exp=DMD</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> DMD
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> DMD
+    &middot; aliases=[dystrophin, DMD, eteplirsen, exon 51, Exondys]
+    &middot; matched_via=DMD (primary)
+  </div>
+  <div class='rat'>DMD is the disease gene responsible for Duchenne muscular dystrophy. Dystrophin, encoded by DMD, anchors the extracellular matrix to the cytoskeleton, stabilizing the sarcolemma and maintaining muscle cell function. The deletion in exon 48-50 leading to an out-of-frame transcript results in the absence of functional dystrophin, causing progressive muscle weakness and cardiomyopathy.</div>
+  
+  <div class='meta'>elapsed=682.8s &middot; tokens in/out=623/710 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>fabry_gla &middot; gene=GLA &middot; target_exp=GLA</h3>
+  <span class="tag miss">target missed</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> GBA
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> GLA
+    &middot; aliases=[GLA, alpha-galactosidase, migalastat, Galafold, chaperone]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>GBA (beta-glucocerebrosidase) is a lysosomal enzyme that hydrolyzes glucosylceramides, which is a downstream step in the metabolism of lipids after GLA&#x27;s cleavage of Gb3. This makes GBA a downstream effector in the pathway, playing a crucial role in the turnover of cellular membranes and lipid metabolism.</div>
+  
+  <div class='meta'>elapsed=806.8s &middot; tokens in/out=620/670 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>fh_pcsk9 &middot; gene=PCSK9 &middot; target_exp=PCSK9</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> PCSK9 (mRNA)
+    &middot; modulation=siRNA_ASO
+    &middot; mechanism=gof
+    &middot; conf=0.85
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> PCSK9
+    &middot; aliases=[PCSK9, inclisiran, evolocumab, proprotein convertase subtilisin/kexin type 9]
+    &middot; matched_via=PCSK9 (primary)
+  </div>
+  <div class='rat'>PCSK9 is the disease gene responsible for familial hypercholesterolemia. Its mRNA is a key player in the regulation of plasma cholesterol homeostasis. By targeting PCSK9&#x27;s mRNA, we can reduce its gof activity, thereby decreasing LDLR degradation and lowering LDL levels, which aligns with the chosen pattern of knocking down the disease gene&#x27;s mRNA.</div>
+  
+  <div class='meta'>elapsed=497.2s &middot; tokens in/out=673/646 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>her2_breast_cancer &middot; gene=ERBB2 &middot; target_exp=ERBB2</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> ERBB2 (HER2) mRNA
+    &middot; modulation=siRNA_ASO
+    &middot; mechanism=gof
+    &middot; conf=0.50
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> ERBB2
+    &middot; aliases=[ERBB2, HER2, trastuzumab, Herceptin, pertuzumab, T-DM1...]
+    &middot; matched_via=ERBB2 (primary)
+  </div>
+  <div class='rat'>The ERBB2 mRNA is the disease gene&#x27;s mRNA, and targeting it via ASO or siRNA can address the gain-of-function (GOF) effect of HER2 overexpression, which is a key driver of metastatic breast cancer. This approach aligns with the chosen pattern of knocking down the disease gene&#x27;s mRNA to counteract its oncogenic activity.</div>
+  
+  <div class='meta'>elapsed=449.3s &middot; tokens in/out=666/785 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>melanoma_braf &middot; gene=BRAF &middot; target_exp=BRAF</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> BRAF
+    &middot; modulation=inhibitor
+    &middot; mechanism=gof
+    &middot; conf=0.80
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> BRAF
+    &middot; aliases=[BRAF, vemurafenib, dabrafenib, encorafenib, Zelboraf, Tafinlar]
+    &middot; matched_via=BRAF (primary)
+  </div>
+  <div class='rat'>BRAF is the disease gene associated with metastatic cutaneous melanoma with the BRAF V600E mutation. It functions as a protein kinase involved in signaling pathways, particularly activating downstream MAP kinases and other effectors. This aligns with the pattern of a disease gene whose protein product plays a central role in signaling and disease progression.</div>
+  
+  <div class='meta'>elapsed=454.3s &middot; tokens in/out=616/591 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>migraine_cgrp &middot; gene=CALCA &middot; target_exp=CALCRL</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> CALCA
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.50
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> CALCRL
+    &middot; aliases=[CALCRL, RAMP1, CGRP receptor, erenumab, Aimovig, fremanezumab...]
+    &middot; matched_via=calca (alias)
+  </div>
+  <div class='rat'>CALCA is the disease gene involved in the pathway related to chronic migraine, as it is linked to elevated CGRP release and vasodilation in the trigeminovascular system. CALCA is druggable, with existing compounds targeting it, making it a suitable candidate for therapeutic intervention.</div>
+  
+  <div class='meta'>elapsed=432.1s &middot; tokens in/out=573/526 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>nsclc_egfr &middot; gene=EGFR &middot; target_exp=EGFR</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> EGFR
+    &middot; modulation=inhibitor
+    &middot; mechanism=gof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> EGFR
+    &middot; aliases=[EGFR, erlotinib, osimertinib, gefitinib, ErbB1, epidermal growth factor receptor]
+    &middot; matched_via=EGFR (primary)
+  </div>
+  <div class='rat'>EGFR is a well-known oncogene associated with non-small cell lung cancer (NSCLC), particularly in cases with EGFR-mutant status. It plays a critical role in signaling pathways, and its dysregulation leads to constitutive kinase activation, contributing to cancer progression. Therapeutic targeting of EGFR has been effective in treating EGFR-mutant NSCLC, making its mRNA a valuable therapeutic target.</div>
+  
+  <div class='meta'>elapsed=462.5s &middot; tokens in/out=665/719 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>obesity_pomc &middot; gene=POMC &middot; target_exp=MC4R</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag hit">cite OK</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> MC4R
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> MC4R
+    &middot; aliases=[MC4R, melanocortin 4 receptor, setmelanotide, Imcivree]
+    &middot; matched_via=MC4R (primary)
+  </div>
+  <div class='rat'>MC4R is a downstream receptor activated by POMC-derived peptides such as alpha-MSH and beta-MSH. It plays a critical role in the leptin-melanocortin pathway, which is essential for maintaining energy homeostasis. This makes MC4R a key target in the pathway influenced by POMC mutations, linking POMC deficiency to obesity through its role in appetite regulation.</div>
+  
+  <div class='meta'>elapsed=571.5s &middot; tokens in/out=683/493 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>pnh_piga &middot; gene=PIGA &middot; target_exp=C5</h3>
+  <span class="tag miss">target missed</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> PIGA (mRNA)
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.90
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> C5
+    &middot; aliases=[C5, eculizumab, Soliris, ravulizumab, Ultomiris, complement component 5]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>PIGA is the disease gene responsible for paroxysmal nocturnal hemoglobinuria (PNH). Its mRNA is the specific target involved in GPI anchor biosynthesis, which is critical for red blood cell survival. Mutations in PIGA lead to loss of function, causing the disease phenotype.</div>
+  
+  <div class='meta'>elapsed=428.8s &middot; tokens in/out=625/568 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>porphyria_alas1 &middot; gene=HMBS &middot; target_exp=ALAS1</h3>
+  <span class="tag miss">target missed</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> HMBS
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.80
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> ALAS1
+    &middot; aliases=[ALAS1, givosiran, Givlaari, delta-aminolevulinate synthase 1]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>HMBS, also known as porphobilinogen deaminase, is the disease gene responsible for catalyzing the polymerization of porphobilinogen in the heme biosynthetic pathway. A loss-of-function mutation in HMBS leads to the accumulation of porphyrins and porphyrin precursors, causing acute intermittent porphyria. This condition is characterized by life-threatening neurovisceral attacks triggered by factors such as drugs, fasting, or hormones. The mechanism of disease is due to the inability of HMBS to convert porphobilinogen into hydroxymethylbilane, disrupting the heme biosynthesis pathway.</div>
+  
+  <div class='meta'>elapsed=574.5s &middot; tokens in/out=728/696 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>ra_tnf &middot; gene=TNF &middot; target_exp=TNF</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> TNF (mRNA)
+    &middot; modulation=siRNA_ASO
+    &middot; mechanism=gof
+    &middot; conf=0.50
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> TNF
+    &middot; aliases=[TNF, TNF-alpha, adalimumab, Humira, infliximab, Remicade...]
+    &middot; matched_via=TNF (primary)
+  </div>
+  <div class='rat'>Targeting TNF&#x27;s mRNA can reduce its expression, thereby mitigating the chronic joint inflammation caused by its overexpression in rheumatoid arthritis. This approach aligns with the chosen pattern of targeting the disease gene&#x27;s mRNA to address the gain-of-function mechanism driving the disease.</div>
+  
+  <div class='meta'>elapsed=416.2s &middot; tokens in/out=636/844 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>scd_hbb &middot; gene=HBB &middot; target_exp=HBB</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> HBB
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> HBB
+    &middot; aliases=[hemoglobin S, HbS, voxelotor, HBB polymerization]
+    &middot; matched_via=HBB (primary)
+  </div>
+  <div class='rat'>HBB encodes adult beta-globin, which is the disease gene in question. The chosen pattern is &#x27;disease_gene_mRNA&#x27;, making HBB the appropriate target protein as it represents the disease gene&#x27;s mRNA.</div>
+  
+  <div class='meta'>elapsed=600.7s &middot; tokens in/out=554/639 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>sma_smn1 &middot; gene=SMN1 &middot; target_exp=SMN2</h3>
+  <span class="tag miss">target missed</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> SMN1
+    &middot; modulation=splice_modifier
+    &middot; mechanism=lof
+    &middot; conf=0.90
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> SMN2
+    &middot; aliases=[SMN2, onasemnogene, nusinersen, SMN2 pre-mRNA]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>SMN1 is the disease gene with a homozygous deletion of exons 7-8 causing a splice defect. This defect can be addressed by targeting an adjacent exon with a splice-modulating antisense oligonucleotide (ASO), fitting the chosen pattern of disease_gene_exon_skip.</div>
+  
+  <div class='meta'>elapsed=589.1s &middot; tokens in/out=678/543 &middot; LLM calls=self_critique:1</div>
+</div>
+
+</body></html>

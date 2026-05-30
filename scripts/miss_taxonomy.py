@@ -56,6 +56,17 @@ _FAMILIES: dict[str, set[str]] = {
     "muscarinic_GPCR": {"CHRM1", "CHRM2", "CHRM3", "CHRM4", "CHRM5"},
     "BTK_signaling": {"BTK", "BLNK", "PLCG2", "BCR"},
     "HER_family": {"ERBB1", "ERBB2", "ERBB3", "ERBB4", "EGFR"},
+    # SOD chain: SOD1 + its copper chaperone CCS + paralogs.
+    "SOD_complex": {"SOD1", "SOD2", "SOD3", "CCS"},
+    # Lysosomal hydrolases -- different substrates but functionally related;
+    # an agent confusing GLA (Fabry) with GBA (Gaucher) is hitting the
+    # lysosomal-enzyme-replacement archetype, not picking randomly.
+    "lysosomal_hydrolase": {"GLA", "GBA", "GBA1", "GBA2", "GUSB", "IDUA",
+                             "NAGLU", "GALNS", "SGSH", "NAGA", "HEXA",
+                             "HEXB", "ARSA", "ARSB", "GAA", "MAN2B1"},
+    # Heme transport / synthesis vs porphyria-side: HMBS (Acute Intermittent
+    # Porphyria gene) + ALAS1 (upstream rate-limiter) -- the givosiran case.
+    "porphyria_axis": {"HMBS", "ALAS1", "ALAS2", "ALAD", "UROS"},
 }
 
 

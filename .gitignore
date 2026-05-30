@@ -33,3 +33,9 @@ Thumbs.db
 # Build artifacts.
 build/
 dist/
+
+# Claude Code's local memory directory (per-user, not for repo).
+.claude/
+
+# Smoke-test scratch outputs (kept locally; not historically interesting).
+sandbox/_smoke_*.json

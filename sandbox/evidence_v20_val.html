@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>therapy-stack evidence: blinded_v20_val_llama.json</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       Roboto, "Helvetica Neue", sans-serif; max-width: 1100px;
+       margin: 2em auto; padding: 0 1em; color: #1a1a1a; }
+h1 { border-bottom: 2px solid #333; padding-bottom: 0.3em; }
+h2 { margin-top: 1.5em; }
+.summary { background: #f4f6f8; padding: 1em; border-radius: 6px;
+           border: 1px solid #ddd; }
+.summary table { border-collapse: collapse; }
+.summary td { padding: 0.2em 0.6em; }
+.case { border: 1px solid #ddd; border-radius: 6px; padding: 1em;
+        margin-bottom: 1em; background: #fff; }
+.case.hit { border-left: 6px solid #2e7d32; }
+.case.miss { border-left: 6px solid #c62828; }
+.case h3 { margin: 0 0 0.4em 0; font-size: 1.05em; }
+.case .pred { background: #f9fbfd; padding: 0.6em 0.8em;
+              border-left: 3px solid #1565c0; margin: 0.5em 0; }
+.case .exp { background: #faf4f4; padding: 0.6em 0.8em;
+             border-left: 3px solid #c62828; margin: 0.5em 0; }
+.case .rat { color: #444; font-style: italic; padding: 0.4em 0;
+             border-top: 1px dashed #ddd; margin-top: 0.5em; }
+.case .meta { color: #666; font-size: 0.85em; margin-top: 0.6em; }
+.tag { display: inline-block; padding: 0.1em 0.5em; border-radius: 4px;
+       font-size: 0.8em; margin-right: 0.4em; }
+.tag.hit { background: #c8e6c9; color: #1b5e20; }
+.tag.miss { background: #ffcdd2; color: #b71c1c; }
+.tag.info { background: #e3f2fd; color: #0d47a1; }
+.kv { display: grid; grid-template-columns: 140px 1fr; gap: 0.2em 0.8em; }
+.kv dt { color: #555; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>therapy-stack evidence trace</h1>
+<p>One card per blinded case. Green-left = target recovered;
+red-left = target missed. Look at the rationale to judge whether
+the agent picked the right target for the right reason -- or got
+lucky with a disease-gene-default heuristic that happened to match.</p>
+
+<div class='summary'>
+  <table>
+    <tr><td>source</td><td><code>blinded_v20_val_llama.json</code></td></tr>
+    <tr><td>backend</td><td>llama</td></tr>
+    <tr><td>model</td><td><code>C:/llama-models/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf</code></td></tr>
+    <tr><td>cases</td><td>12</td></tr>
+    <tr><td>target recovered</td><td>9/12 (75%)
+            -- Wilson 95% CI [47%, 91%]</td></tr>
+    <tr><td>modality recovered</td><td>8/12</td></tr>
+    <tr><td>citation recovered</td><td>0/12</td></tr>
+    <tr><td>total wall</td><td>5939.4s (99.0 min)</td></tr>
+  </table>
+</div>
+
+<h2>Per-case evidence (N = 12)</h2>
+
+<div class='case hit'>
+  <h3>aprocitentan_htn &middot; gene=EDN1 &middot; target_exp=EDNRA</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> EDN1
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.50
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> EDNRA
+    &middot; aliases=[EDNRA, EDNRB, endothelin receptor, aprocitentan, Tryvio, ET-A...]
+    &middot; matched_via=edn1 (valid_target)
+  </div>
+  <div class='rat'>EDN1 is a key disease gene associated with resistant hypertension. Elevated levels of EDN1 contribute to vasoconstriction and aldosterone-driven sodium retention, which are central to the disease phenotype. As a vasoactive peptide, EDN1 directly impacts the vasculature and is a primary mediator of the vasoconstriction observed in resistant hypertension. This aligns with the chosen pattern of &#x27;disease_gene_protein_chaperone&#x27; as EDN1 acts as a chaperone in the signaling pathways involved in hypertension.</div>
+  
+  <div class='meta'>elapsed=547.2s &middot; tokens in/out=690/589 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>capivasertib_breast &middot; gene=PIK3CA &middot; target_exp=AKT1</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> PIK3CA
+    &middot; modulation=siRNA_ASO
+    &middot; mechanism=gof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> AKT1
+    &middot; aliases=[AKT1, AKT2, AKT3, AKT, capivasertib, Truqap]
+    &middot; matched_via=pik3ca (valid_target)
+  </div>
+  <div class='rat'>PIK3CA is a disease gene associated with activating missense mutations (e.g., p.E545K, p.H1047R) in its catalytic subunit, leading to constitutive activation of the PI3K/AKT/mTOR pathway. Knocking down the disease gene&#x27;s mRNA with ASO/siRNA can mitigate this overactive signaling, making it a suitable target for therapy.</div>
+  
+  <div class='meta'>elapsed=429.5s &middot; tokens in/out=719/525 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>cobenfy_schizophrenia &middot; gene=CHRM4 &middot; target_exp=CHRM4</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> CHRM4
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.20
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> CHRM4
+    &middot; aliases=[CHRM4, CHRM1, M1, M4, muscarinic, xanomeline...]
+    &middot; matched_via=CHRM4 (primary)
+  </div>
+  <div class='rat'>CHRM4 is the disease gene associated with schizophrenia. Its role in muscarinic acetylcholine receptor signaling, including inhibition of adenylate cyclase and modulation of potassium channels, aligns with the reduced muscarinic-cholinergic signaling observed in schizophrenia. CHRM4&#x27;s druggable nature and involvement in relevant pathways make it a suitable target for therapeutic intervention.</div>
+  
+  <div class='meta'>elapsed=469.7s &middot; tokens in/out=612/873 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>crinecerfont_cah &middot; gene=CYP21A2 &middot; target_exp=CRHR1</h3>
+  <span class="tag miss">target missed</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> CYP21A2
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.50
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> CRHR1
+    &middot; aliases=[CRHR1, CRF1, CRF-1 receptor, CRH receptor, corticotropin-releasing hormone receptor 1, crinecerfont...]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>CYP21A2 is the disease gene responsible for 21-hydroxylase deficiency, a key enzyme in the production of glucocorticoids and mineralocorticoids. Mutations in CYP21A2 lead to congenital adrenal hyperplasia, causing androgen excess and cortisol deficiency. As a cytochrome P450 enzyme, it plays a central role in steroidogenesis, fitting the pattern of a disease gene affecting mineralocorticoid biosynthesis.</div>
+  
+  <div class='meta'>elapsed=436.6s &middot; tokens in/out=680/432 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>donanemab_alzheimers &middot; gene=APP &middot; target_exp=APP</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> APP
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> APP
+    &middot; aliases=[amyloid, amyloid-beta, Abeta, Abeta42, amyloid plaque, donanemab...]
+    &middot; matched_via=APP (primary)
+  </div>
+  <div class='rat'>APP is the disease gene associated with Alzheimer&#x27;s disease. It functions as a chaperone protein, aiding in the transport and processing of amyloid-beta peptides, which are central to the disease pathology. This aligns with the &#x27;disease_gene_protein_chaperone&#x27; pattern, as APP&#x27;s role in amyloid-beta production and its druggable nature make it a suitable target.</div>
+  
+  <div class='meta'>elapsed=479.8s &middot; tokens in/out=621/686 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>garadacimab_hae &middot; gene=SERPING1 &middot; target_exp=F12</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> BDKRB2
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.60
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> F12
+    &middot; aliases=[F12, FXII, Factor XII, Factor XIIa, garadacimab, Andembry...]
+    &middot; matched_via=bdkrb2 (valid_target)
+  </div>
+  <div class='rat'>BDKRB2 is a G-protein coupled receptor for bradykinin, playing a role in the inflammatory response and airway symptoms associated with hereditary angioedema. It is a downstream effector in the pathway, linking bradykinin production to its effects. Its druggable nature and role in the disease mechanism make it a suitable target.</div>
+  
+  <div class='meta'>elapsed=629.8s &middot; tokens in/out=626/757 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>iptacopan_pnh &middot; gene=PIGA &middot; target_exp=CFB</h3>
+  <span class="tag miss">target missed</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> PIGA (mRNA)
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> CFB
+    &middot; aliases=[CFB, complement factor B, iptacopan, Fabhalta, LNP023]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>PIGA is the disease gene responsible for GPI-anchor biosynthesis. Its loss-of-function mutation leads to GPI-anchor deficiency, causing paroxysmal nocturnal hemoglobinuria (PNH) with persistent extravascular hemolysis. This fits the chosen pattern as the target is the disease gene&#x27;s mRNA.</div>
+  
+  <div class='meta'>elapsed=422.6s &middot; tokens in/out=596/500 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>lebrikizumab_atopic_derm &middot; gene=IL13 &middot; target_exp=IL13</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> IL13RA2
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> IL13
+    &middot; aliases=[IL13, IL-13, interleukin-13, lebrikizumab, Ebglyss, tralokinumab...]
+    &middot; matched_via=IL13 (primary)
+  </div>
+  <div class='rat'>IL13RA2 is a key downstream effector in the IL13 signaling pathway. IL13 binds to IL13RA2, which is part of the receptor complex that mediates the effects of IL13 in atopic dermatitis. This makes IL13RA2 a suitable target for the chosen pattern.</div>
+  
+  <div class='meta'>elapsed=550.9s &middot; tokens in/out=587/578 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>mavorixafor_whim &middot; gene=CXCR4 &middot; target_exp=CXCR4</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> CXCR4
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.80
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> CXCR4
+    &middot; aliases=[CXCR4, mavorixafor, Xolremdi, X4P-001]
+    &middot; matched_via=CXCR4 (primary)
+  </div>
+  <div class='rat'>CXCR4 is a chemokine receptor involved in signaling pathways, particularly in the binding and entry of HIV virion and the formation of the definitive endoderm. It is associated with WHIM syndrome, characterized by neutropenia, hypogammaglobulinemia, and susceptibility to infections. The mutations in CXCR4 lead to persistent CXCL12 signaling, which is a key mechanism in the disease. CXCR4 is druggable, as indicated by its presence in the ChEMBL database with active compounds.</div>
+  
+  <div class='meta'>elapsed=461.7s &middot; tokens in/out=696/432 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>resmetirom_mash &middot; gene=THRB &middot; target_exp=THRB</h3>
+  <span class="tag hit">target recovered</span><span class="tag miss">modality miss</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> THRB
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> THRB
+    &middot; aliases=[THRB, THR-beta, thyroid hormone receptor beta, resmetirom, Rezdiffra]
+    &middot; matched_via=THRB (primary)
+  </div>
+  <div class='rat'>THRB is the disease gene involved in the nuclear receptor transcription pathway, which is critical for thyroid hormone signaling. Impaired function of THRB leads to metabolic dysfunction-associated steatohepatitis (MASH), characterized by hepatic steatosis, inflammation, and fibrosis. This aligns with the chosen pattern, as THRB serves as a key regulator in the pathogenesis of the disease.</div>
+  
+  <div class='meta'>elapsed=522.5s &middot; tokens in/out=638/682 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case miss'>
+  <h3>sotatercept_pah &middot; gene=BMPR2 &middot; target_exp=ACVR2A</h3>
+  <span class="tag miss">target missed</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag hit">conf&gt;=min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> BMPR2
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.70
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> ACVR2A
+    &middot; aliases=[ACVR2A, ActRIIA, activin, INHBA, GDF8, GDF11...]
+    &middot; matched_via= ()
+  </div>
+  <div class='rat'>BMPR2 is the disease gene associated with pulmonary arterial hypertension. As a protein chaperone in the BMP signaling pathway, it plays a critical role in regulating downstream signaling, including activation of SMAD transcription factors. Loss-of-function mutations in BMPR2 lead to heritable and idiopathic forms of PAH, highlighting its role as a key driver of the disease.</div>
+  
+  <div class='meta'>elapsed=489.4s &middot; tokens in/out=616/1000 &middot; LLM calls=self_critique:1</div>
+</div>
+
+
+<div class='case hit'>
+  <h3>vorasidenib_glioma &middot; gene=IDH1 &middot; target_exp=IDH1</h3>
+  <span class="tag hit">target recovered</span><span class="tag hit">modality OK</span><span class="tag info">cite miss</span><span class="tag miss">conf&lt;min</span>
+  <div class='pred'>
+    <strong>Predicted:</strong> IDH1 (mRNA)
+    &middot; modulation=inhibitor
+    &middot; mechanism=lof
+    &middot; conf=0.40
+  </div>
+  <div class='exp'>
+    <strong>Expected:</strong> IDH1
+    &middot; aliases=[IDH1, IDH2, mutant IDH, vorasidenib, Voranigo, isocitrate dehydrogenase]
+    &middot; matched_via=IDH1 (primary)
+  </div>
+  <div class='rat'>IDH1 is a key enzyme involved in the abnormal conversion of 2-oxoglutarate to 2-hydroxyglutarate, which is associated with the development of astrocytomas and oligodendrogliomas. The mutation p.R132H in IDH1 leads to the production of the oncometabolite (R)-2-hydroxyglutarate, making IDH1&#x27;s mRNA a valid target for therapeutic intervention.</div>
+  
+  <div class='meta'>elapsed=499.8s &middot; tokens in/out=663/650 &middot; LLM calls=self_critique:1</div>
+</div>
+
+</body></html>

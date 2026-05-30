@@ -189,3 +189,79 @@ def test_is_generic_alias():
     assert _is_generic_alias("antibody")
     assert not _is_generic_alias("KLKB1")
     assert not _is_generic_alias("CRH receptor")
+
+
+# ── disease-gene-default rate ─────────────────────────────────────────────────
+#
+# These tests mirror the inline computation in sandbox/run_blinded.py.
+# Keep them in sync; if the run_blinded code changes the canonicalization
+# of predicted_target, expected_target, or gene, the test should be
+# updated to match (and the README number should also be re-derived).
+
+import re as _re
+
+
+def _canon(t: str) -> str:
+    if not t:
+        return ""
+    m = _re.search(r"\b[A-Z][A-Z0-9]{1,9}\b", t)
+    return (m.group(0) if m else t.strip()).upper()
+
+
+def _dg_default_rate(results: list[dict]) -> tuple[int, int, float]:
+    """Mirror the disease-gene-default-rate computation. Returns
+    (n_default_when_diverge, n_diverge_cases, rate)."""
+    n_diverge = 0
+    n_default = 0
+    for r in results:
+        pred = _canon(r.get("predicted_target") or "")
+        gene = _canon(r.get("gene") or "")
+        exp  = _canon(r.get("expected_target") or "")
+        if gene and exp and gene != exp:
+            n_diverge += 1
+            if pred == gene:
+                n_default += 1
+    rate = n_default / n_diverge if n_diverge else 0.0
+    return n_default, n_diverge, rate
+
+
+def test_dg_default_rate_zero():
+    # No case diverges (target == disease gene), so rate is undefined → 0.
+    results = [
+        {"gene": "HBB", "expected_target": "HBB", "predicted_target": "HBB"},
+    ]
+    n, d, r = _dg_default_rate(results)
+    assert (n, d, r) == (0, 0, 0.0)
+
+
+def test_dg_default_rate_all_default():
+    # Every diverging case predicted the disease gene → 100% default.
+    results = [
+        {"gene": "CYP21A2", "expected_target": "CRHR1", "predicted_target": "CYP21A2"},
+        {"gene": "BMPR2",   "expected_target": "ACVR2A", "predicted_target": "BMPR2"},
+        {"gene": "PIGA",    "expected_target": "CFB",    "predicted_target": "PIGA (mRNA)"},
+    ]
+    n, d, r = _dg_default_rate(results)
+    assert n == 3 and d == 3 and r == 1.0
+
+
+def test_dg_default_rate_mixed():
+    # 1 default, 1 recovered, 1 wrong-but-not-default; only the first counts as default.
+    results = [
+        {"gene": "CYP21A2", "expected_target": "CRHR1", "predicted_target": "CYP21A2"},
+        {"gene": "BMPR2",   "expected_target": "ACVR2A", "predicted_target": "ACVR2A"},
+        {"gene": "PIGA",    "expected_target": "CFB",    "predicted_target": "CD55"},
+    ]
+    n, d, r = _dg_default_rate(results)
+    assert n == 1 and d == 3 and r == 1/3
+
+
+def test_dg_default_rate_ignores_target_equals_gene_cases():
+    # Cases where the FDA target IS the disease gene aren't part of the
+    # denominator. They should be excluded.
+    results = [
+        {"gene": "SMN1", "expected_target": "SMN1", "predicted_target": "SMN1"},
+        {"gene": "CYP21A2", "expected_target": "CRHR1", "predicted_target": "CYP21A2"},
+    ]
+    n, d, r = _dg_default_rate(results)
+    assert d == 1 and n == 1 and r == 1.0

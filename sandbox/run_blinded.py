@@ -450,6 +450,35 @@ async def main_async(args) -> int:
                  if r.get("target_recovered")
                  and r.get("modality_recovered")
                  and r.get("citation_recovered"))
+
+    # Disease-gene-default rate: fraction of predictions where the model
+    # output the disease gene as the target, regardless of whether that's
+    # correct. A high rate on cases where the EXPECTED target is the
+    # disease gene is fine; a high rate on cases where the expected target
+    # is NOT the disease gene is the dominant val failure mode (v0.8
+    # miss-taxonomy: 100% of R1-Distill val misses were this).
+    def _canon(t: str) -> str:
+        if not t:
+            return ""
+        m = re.search(r"\b[A-Z][A-Z0-9]{1,9}\b", t)
+        return (m.group(0) if m else t.strip()).upper()
+
+    dg_pred_when_should_diverge = 0
+    n_diverge_cases = 0
+    dg_pred_total = 0
+    for r in results:
+        pred_canon = _canon(r.get("predicted_target") or "")
+        gene_canon = _canon(r.get("gene") or "")
+        exp_canon = _canon(r.get("expected_target") or "")
+        if pred_canon and pred_canon == gene_canon:
+            dg_pred_total += 1
+        if gene_canon and exp_canon and gene_canon != exp_canon:
+            n_diverge_cases += 1
+            if pred_canon == gene_canon:
+                dg_pred_when_should_diverge += 1
+    dg_default_rate = (dg_pred_when_should_diverge / n_diverge_cases
+                       if n_diverge_cases else 0.0)
+
     lo, hi = wilson_ci(target_n, n) if n else (0.0, 0.0)
     print(f"=== Target-recovery: {target_n}/{n} (95% Wilson CI {lo*100:.0f}–{hi*100:.0f}%) "
           f"({total:.0f}s total) ===")
@@ -458,6 +487,9 @@ async def main_async(args) -> int:
     print(f"    Full (target+modality+citation): {full_n}/{n}")
     print(f"    Baseline disease-gene:  {sum(b['recovered'] for b in base_dg)}/{n}")
     print(f"    Baseline 1st interactor:{sum(b['recovered'] for b in base_rx)}/{n}")
+    print(f"    Disease-gene-default rate (when expected differs): "
+          f"{dg_pred_when_should_diverge}/{n_diverge_cases} "
+          f"({dg_default_rate*100:.0f}%)")
     print()
 
     if args.out:
@@ -472,6 +504,10 @@ async def main_async(args) -> int:
             "wilson_ci_target": [lo, hi],
             "baseline_disease_gene_recovered": sum(b["recovered"] for b in base_dg),
             "baseline_first_interactor_recovered": sum(b["recovered"] for b in base_rx),
+            "disease_gene_default_rate": dg_default_rate,
+            "disease_gene_default_when_should_diverge": dg_pred_when_should_diverge,
+            "disease_gene_default_diverge_cases": n_diverge_cases,
+            "disease_gene_predicted_total": dg_pred_total,
             "total_seconds": round(total, 1),
             "results": results,
         }, indent=2), encoding="utf-8")

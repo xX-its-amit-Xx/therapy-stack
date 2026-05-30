@@ -158,3 +158,53 @@ Adversarial scores are tracked SEPARATELY from dev/val (different
 curation philosophy; don't aggregate). A drop in adversarial recovery
 is a signal that a recent change weakened a specific behavior; cross-
 reference with the failure mode the case was designed to probe.
+
+## 12. Reading a miss: the failure-mode taxonomy
+
+When a case misses, `scripts/miss_taxonomy.py` classifies it into one of:
+
+| Failure mode | Heuristic | What to do |
+|---|---|---|
+| `disease_gene_default` | predicted = disease gene, expected ≠ disease gene | The Stage 1 pattern selector chose a non-disease-gene pattern but Stage 2 still output the disease gene. The v0.9 guard catches this for {downstream_effector, paralog, upstream_enzyme, cargo_receptor, downstream_receptor_agonist, repressor, feedback_axis_receptor}. If the miss is in a *disease-gene-centric* pattern (chaperone, mRNA), check the v0.9.1 feedback-axis override -- the phenotype may need a feedback marker that's not yet in the marker list. |
+| `paralog_confusion` | predicted is in the same biology-curated family as the expected target or disease gene | The agent picked a sibling. Often a real biology-class match (CHRM5 vs CHRM4). If the YAML's `valid_targets` doesn't cover the sibling, decide whether to broaden the set (multi-target acceptance is legitimate) or leave it strict (some siblings really are wrong). |
+| `confabulation_off_pathway` | predicted is in neither the disease gene's family nor the expected target's family | The retrieval stack didn't deliver the right candidates. Check the `pathway_genes` and `interactor_text` blocks in the agent state for the case. Likely needs a curated `pathway_neighbors` lookup or an explicit `agentic_target_research` tool call. |
+| `no_prediction` | predicted_target is empty | The agent fell back to "Unknown" -- usually an LLM JSON parse failure or a backend error. Check the run log. |
+
+A successful production iteration moves cases from `confabulation_off_pathway` → `paralog_confusion` → `disease_gene_default` → recovered, in roughly that order: first you fix retrieval, then you fix family-disambiguation, then you fix the disease-gene-default lazy fallback, and only then is the residual miss "real" pipeline failure.
+
+The disease-gene-default rate is also surfaced in every `blinded_*.json` as
+`disease_gene_default_rate` (and the underlying counts). When this is > 0.2
+on val, the disease-gene-default guard is not pulling its weight and a
+prompt-level change is warranted before any other optimization.
+
+## 13. Dataset diversity audit
+
+`scripts/dataset_diversity.py` reports the dev/val/adversarial splits by
+target_kind, modulation_type, and therapeutic area. A split that's 80%
+inhibitors-against-disease-gene is a different benchmark than one
+spread across modalities. The current state (`sandbox/DIVERSITY.md`):
+
+- dev: 56% disease_gene, 38% downstream_effector, 6% paralog
+- val: 50% disease_gene, 50% downstream_effector
+- adv: 43% disease_gene, 57% downstream_effector (the adversarial set
+  is deliberately biased toward the harder case)
+
+If you add a benchmark case, regenerate the diversity report. A val
+that's drifted to 80% disease_gene would let the disease-gene-default
+agent cheat the headline number; the adversarial set is the guard
+against that drift.
+
+## 14. Operational notes
+
+- **One Llama process at a time.** The local-Llama backend mmaps a
+  ~5 GB GGUF; running two concurrent instances OOMs on 64 GB CPU-only
+  with the rest of the agent stack loaded. The CI workflow uses the
+  Anthropic backend for this reason.
+- **The val set has been peeked at.** Each case has been examined when
+  it failed; this is honest curator iteration but it does mean val is
+  not a clean held-out set anymore. The proper held-out set is the
+  *next quarter's* FDA approvals (section 8).
+- **No commits during a bench run.** A model load takes ~15 sec; if a
+  rebase or branch switch lands during the load, the run will fail
+  midway and produce a half-populated JSON. Run benches against a
+  clean working tree.

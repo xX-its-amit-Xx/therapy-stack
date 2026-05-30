@@ -19,6 +19,7 @@ didn't exist yet at that version.
 | v0.7 final | 2026-05-30 | 15/16 | 4/6 | n/a | + multi-target acceptance + Stage 2 research-deference + SC3 |
 | v0.8 (this round) | 2026-05-30 | 10/16 (R1-Distill SC1) | 9/12 (3H) | 1/4 | cache + field_rationale_align + 6 new val + pathway_neighbors + valid_targets + vote-margin confidence + adversarial set + observability stack |
 | v0.9 (this round) | 2026-05-30 | tbd | tbd | tbd | disease_gene_default guard (targeted at the dominant val failure mode) |
+| v0.9.1 (this round) | 2026-05-30 | tbd | tbd | tbd | pattern 9 (feedback_axis_receptor) + phenotype-pattern consistency override + extended guard kinds. Crinecerfont smoke blocked on RAM (Windsurf editor 10GB; only 3.8GB avail to load 5GB R1-Distill); to be re-measured on next clean run. |
 
 ## Lever-by-lever summary
 
@@ -36,6 +37,7 @@ For each upgrade lever, the *honest* lift on the relevant split:
 | Stage 2 research-deference + SC3 (v0.7 final) | 0 | 0 | Same; closes failure modes the pipeline already had |
 | v0.8 stack (cache + field_align + 6 new val + adv + observability) | varies by SC | +2 (with new val) | Most of the win is observability and adversarial coverage, not raw accuracy |
 | disease_gene_default guard (v0.9) | TBD | TBD | Targeted at the single dominant remaining failure mode |
+| Pattern 9 + feedback-axis override (v0.9.1) | TBD | TBD | Crinecerfont/CAH archetype: phenotype contains explicit feedback-axis markers (ACTH-driven, compensatory) but Stage 1 picks chaperone (4a). Override forces re-pick toward pattern 9 (feedback_axis_receptor → e.g. CRHR1) |
 
 ## What every round taught us
 
