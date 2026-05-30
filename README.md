@@ -138,6 +138,19 @@ It does NOT reliably propose targets that require:
 
 A fair pitch: **a retrieval-augmented FDA-target *explainer* for known biology**, not a novel-target *discoverer*. Used as a suggestion / sanity-check surface alongside a domain expert, the system is useful.
 
+<a id="honest-limitations-the-hidden-curriculum"></a>
+
+### Honest limitations (the hidden curriculum)
+
+What the headline number doesn't tell you:
+
+1. **N is small.** 16 dev + 12 val + 7 adversarial = 35 cases. Wilson 95% CI on 9/12 val is 46–91%. We cannot distinguish 9/12 from 11/12.
+2. **The val set has been peeked at.** When a case missed, the curator looked at it. This is honest iteration but it does mean val is not a clean held-out set. The proper held-out set is the next quarter's FDA approvals (see [`RUNBOOK.md`](RUNBOOK.md) section 8).
+3. **Calibration is broken on every configuration measured.** Under-confident, ECE 0.2–0.4. Don't use LLM self-reported confidence as a flag-for-review signal; vote margins are empirically better.
+4. **The LLM prior on "pick the disease gene" is hard to override prompt-side.** v0.9.2's hard pattern override forces pattern 9 (feedback_axis_receptor) for feedback-driven cases like Crinecerfont, but R1-Distill 8B's Stage 2 picker still sometimes ignores the override and writes the disease gene. The model's prior is stronger than the prompt instruction. The fix surface is either (a) a re-trained model, (b) a heavier-weight ensemble, or (c) a hard structural constraint (forbid the disease gene in the candidate set, not just in the prompt instructions). v0.10+ work.
+5. **Adversarial set discriminates between configs that aggregate-equal on val.** A configuration scoring 75% on val could be 25% or 75% on adversarial. The headline number alone is the wrong artifact to optimize.
+6. **The benchmark IS the curriculum.** Every prompt the agent sees is constructed by the same person who curated the YAMLs. Real production input distribution may differ in ways the benchmark doesn't surface.
+
 ---
 
 ## Cite this work
