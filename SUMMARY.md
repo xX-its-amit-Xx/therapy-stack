@@ -97,4 +97,5 @@ The signal that survives the small-N caveat:
 
 - [`therapy-agent`](https://github.com/xX-its-amit-Xx/therapy-agent) -- the LangGraph pipeline. 9 nodes, 9 tools, 3 LLM backends (Anthropic / OpenAI / llama-cpp).
 - [`fda-strategy-triples`](https://github.com/xX-its-amit-Xx/fda-strategy-triples) -- the v0.1.0 dataset shipped as a Python package.
-- [`g2p-rag`](https://github.com/xX-its-amit-Xx/g2p-rag) and [`g2p-agent`](https://github.com/xX-its-amit-Xx/g2p-agent) -- the variant-interpretation siblings (originally intended as the retriever for therapy-agent; substituted with UniProt direct queries because the G2P ChromaDB index wasn't built; documented as such).
+- [`g2p-rag`](https://github.com/xX-its-amit-Xx/g2p-rag) -- the per-residue protein knowledge retriever (ChromaDB + BM25 hybrid). **Wired into therapy-agent as of 2026-05-31**: the local ChromaDB index covers all 47 benchmark genes (684 chunks across domain / variant_cluster / protein_summary types). The previous "UniProt fallback" path only fires now when the index is genuinely unavailable.
+- [`g2p-agent`](https://github.com/xX-its-amit-Xx/g2p-agent) -- variant-interpretation sibling that depends on g2p-rag.
