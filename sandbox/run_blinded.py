@@ -100,6 +100,14 @@ def get_therapy_agent_root() -> Path:
     needs benchmark cases (e.g. `load_cases`, `baseline_first_reactome_interactor`),
     by which point CI / dev environments are expected to have it on disk or
     pointed to via THERAPY_AGENT_ROOT.
+
+    Falls back through several candidate paths to support different layouts:
+      1. $THERAPY_AGENT_ROOT (explicit override, any environment).
+      2. <therapy-stack>/therapy-agent  (CI runner: sibling checked out *inside*
+         therapy-stack, e.g. `actions/checkout` into a subdir named therapy-agent).
+      3. <parent>/therapy-agent         (local dev: sibling next to therapy-stack).
+      4. <grandparent>/therapy-agent    (flat monorepo edge case, two levels up).
+    Raises FileNotFoundError listing every path tried if none exist.
     """
     env = os.environ.get("THERAPY_AGENT_ROOT")
     if env:
@@ -108,12 +116,20 @@ def get_therapy_agent_root() -> Path:
             return p
     # repo layout: <parent>/therapy-stack/sandbox/run_blinded.py
     here = Path(__file__).resolve()
-    sibling = here.parent.parent.parent / "therapy-agent"
-    if sibling.exists():
-        return sibling
+    candidates = [
+        here.parent.parent / "therapy-agent",          # CI runner: inside therapy-stack
+        here.parent.parent.parent / "therapy-agent",   # local dev: next to therapy-stack
+        here.parent.parent.parent.parent / "therapy-agent",  # flat monorepo edge case
+    ]
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    tried = [f"THERAPY_AGENT_ROOT={env!r}"] if env else ["THERAPY_AGENT_ROOT=<unset>"]
+    tried += [str(c) for c in candidates]
     raise FileNotFoundError(
         "Could not locate therapy-agent. Set THERAPY_AGENT_ROOT env var or "
-        "place therapy-agent next to therapy-stack."
+        "place therapy-agent next to therapy-stack. Tried:\n  - "
+        + "\n  - ".join(tried)
     )
 
 
