@@ -1,0 +1,26 @@
+# Pinned CI dependencies for therapy-stack blinded benchmark.
+#
+# These are the direct dependencies used by sandbox/run_blinded.py and
+# the smoke + benchmark jobs in .github/workflows/benchmark.yml. Pins
+# match the versions in sandbox/.venv (see `pip freeze`) so CI matches
+# local dev exactly. Bump deliberately, not via floating versions.
+#
+# Editable installs of the two sibling repos (fda-strategy-triples,
+# therapy-agent) are still done separately in the workflow with
+# --no-deps so this file remains the single source of truth for runtime
+# package versions.
+
+pyyaml==6.0.3
+pandas==3.0.3
+pyarrow==24.0.0
+requests==2.34.2
+httpx==0.28.1
+tenacity==9.1.4
+python-dotenv==1.2.2
+langgraph==1.2.1
+langchain-core==1.4.0
+pydantic==2.13.4
+typer==0.25.1
+rich==15.0.0
+pytest==9.0.3
+anthropic==0.69.0
