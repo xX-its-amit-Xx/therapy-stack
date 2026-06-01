@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import json
 import math
 import os
@@ -90,8 +91,16 @@ async def run_agent_self_consistent(gene: str, mutation: str, disease_phenotype:
 
 # ── locate the therapy-agent sibling repo ─────────────────────────────────────
 
-def _find_therapy_agent_root() -> Path:
-    """Locate `therapy-agent` next to `therapy-stack` (or via env var)."""
+@functools.lru_cache(maxsize=1)
+def get_therapy_agent_root() -> Path:
+    """Locate `therapy-agent` next to `therapy-stack` (or via env var).
+
+    Lazy / memoized so simply importing this module does not require the
+    sibling repo to exist. The lookup runs the first time a caller actually
+    needs benchmark cases (e.g. `load_cases`, `baseline_first_reactome_interactor`),
+    by which point CI / dev environments are expected to have it on disk or
+    pointed to via THERAPY_AGENT_ROOT.
+    """
     env = os.environ.get("THERAPY_AGENT_ROOT")
     if env:
         p = Path(env).resolve()
@@ -108,13 +117,6 @@ def _find_therapy_agent_root() -> Path:
     )
 
 
-_THERAPY_AGENT_ROOT = _find_therapy_agent_root()
-_PRIMARY_DIR = _THERAPY_AGENT_ROOT / "benchmarks"                       # primary (Ekterly + BRD4780)
-_SUPP_DIR    = _THERAPY_AGENT_ROOT / "benchmarks" / "cases"             # supplementary dev set
-_HELDOUT_DIR = _THERAPY_AGENT_ROOT / "benchmarks" / "heldout_2024_2025" # post-cutoff val set
-_ADV_DIR     = _THERAPY_AGENT_ROOT / "benchmarks" / "adversarial"       # adversarial probes
-
-
 # ── case loading ──────────────────────────────────────────────────────────────
 
 def load_cases(set_name: str = "dev") -> list[dict]:
@@ -127,13 +129,19 @@ def load_cases(set_name: str = "dev") -> list[dict]:
         test).
       - "all": dev + val combined.
     """
+    root = get_therapy_agent_root()
+    primary_dir = root / "benchmarks"                       # primary (Ekterly + BRD4780)
+    supp_dir    = root / "benchmarks" / "cases"             # supplementary dev set
+    heldout_dir = root / "benchmarks" / "heldout_2024_2025" # post-cutoff val set
+    adv_dir     = root / "benchmarks" / "adversarial"       # adversarial probes
+
     dirs: list = []
     if set_name in ("dev", "all"):
-        dirs += [_PRIMARY_DIR, _SUPP_DIR]
+        dirs += [primary_dir, supp_dir]
     if set_name in ("val", "all"):
-        dirs.append(_HELDOUT_DIR)
+        dirs.append(heldout_dir)
     if set_name in ("adversarial", "all"):
-        dirs.append(_ADV_DIR)
+        dirs.append(adv_dir)
     if not dirs:
         raise ValueError(f"Unknown set {set_name!r}; use dev|val|adversarial|all.")
     cases: list[dict] = []
@@ -143,10 +151,10 @@ def load_cases(set_name: str = "dev") -> list[dict]:
         for p in sorted(d.glob("*.yaml")):
             data = yaml.safe_load(p.read_text(encoding="utf-8"))
             if data and "input" in data and "expected_outputs" in data:
-                data["_file"] = str(p.relative_to(_THERAPY_AGENT_ROOT))
-                if d == _HELDOUT_DIR:
+                data["_file"] = str(p.relative_to(root))
+                if d == heldout_dir:
                     data["_set"] = "val"
-                elif d == _ADV_DIR:
+                elif d == adv_dir:
                     data["_set"] = "adversarial"
                 else:
                     data["_set"] = "dev"
