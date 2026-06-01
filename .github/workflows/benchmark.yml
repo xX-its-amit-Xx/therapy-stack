@@ -111,7 +111,11 @@ jobs:
     needs: smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    # NOTE: cannot gate on `secrets.X != ''` at job level -- the secrets
+    # context is not available in job-level `if:`. Each step that uses
+    # the secret is gated individually via env + step-level `if:` below.
+    env:
+      HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -127,6 +131,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps (Anthropic backend)
+        if: env.HAS_ANTHROPIC_KEY == 'true'
         run: |
           pip install --upgrade pip
           pip install pyyaml pandas pyarrow requests httpx tenacity \
@@ -135,6 +140,7 @@ jobs:
           pip install -e ./therapy-agent --no-deps
 
       - name: Run benchmark on dev set
+        if: env.HAS_ANTHROPIC_KEY == 'true'
         working-directory: sandbox
         env:
           THERAPY_AGENT_LLM_BACKEND: anthropic
@@ -143,6 +149,7 @@ jobs:
         run: python run_blinded.py --set dev --out dev_results.json
 
       - name: Run benchmark on val set
+        if: env.HAS_ANTHROPIC_KEY == 'true'
         working-directory: sandbox
         env:
           THERAPY_AGENT_LLM_BACKEND: anthropic
@@ -152,6 +159,7 @@ jobs:
 
       - name: Regression check
         id: regression
+        if: env.HAS_ANTHROPIC_KEY == 'true'
         working-directory: sandbox
         run: |
           python ../scripts/regression_check.py \
