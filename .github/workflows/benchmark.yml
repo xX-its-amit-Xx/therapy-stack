@@ -100,8 +100,9 @@ jobs:
 
       - name: Compute baselines (no LLM)
         working-directory: sandbox
+        # THERAPY_AGENT_LLM_BACKEND is set but unused here; baselines don't call the LLM.
         env:
-          THERAPY_AGENT_LLM_BACKEND: anthropic  # not used; baselines don't call LLM
+          THERAPY_AGENT_LLM_BACKEND: anthropic
         run: |
           python run_blinded.py --baselines-only --set ${{ github.event.inputs.set || 'all' }}
 
