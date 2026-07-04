@@ -1,0 +1,50 @@
+[
+  {
+    "version_tag": "v20_dev_llama",
+    "label": "R1-Distill 8B local + cache",
+    "split": "dev",
+    "model": "DeepSeek-R1-Distill-Llama-8B",
+    "quantization": "Q4_K_M",
+    "n_cases": 16,
+    "recovered_count": 10,
+    "accuracy": 0.625,
+    "wilson_ci": [
+      0.3864064709793481,
+      0.815190174452472
+    ],
+    "wall_seconds": 8868.0,
+    "source_result_file": "sandbox/blinded_v20_dev_llama.json"
+  },
+  {
+    "version_tag": "v20_val_llama",
+    "label": "R1-Distill 8B local + cache",
+    "split": "val",
+    "model": "DeepSeek-R1-Distill-Llama-8B",
+    "quantization": "Q4_K_M",
+    "n_cases": 12,
+    "recovered_count": 9,
+    "accuracy": 0.75,
+    "wilson_ci": [
+      0.46768966087934005,
+      0.9110599603710386
+    ],
+    "wall_seconds": 5939.4,
+    "source_result_file": "sandbox/blinded_v20_val_llama.json"
+  },
+  {
+    "version_tag": "v20_adv_llama",
+    "label": "R1-Distill 8B local + cache",
+    "split": "adversarial",
+    "model": "DeepSeek-R1-Distill-Llama-8B",
+    "quantization": "Q4_K_M",
+    "n_cases": 4,
+    "recovered_count": 1,
+    "accuracy": 0.25,
+    "wilson_ci": [
+      0.045586062644636216,
+      0.6993639475573634
+    ],
+    "wall_seconds": 2391.4,
+    "source_result_file": "sandbox/blinded_v20_adv_llama.json"
+  }
+]

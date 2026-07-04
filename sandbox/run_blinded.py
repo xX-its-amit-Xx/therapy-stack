@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -350,6 +351,43 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (max(0.0, centre - half), min(1.0, centre + half))
 
 
+def _git_commit(repo: Path) -> str:
+    """Return the short git commit for *repo*, or empty if unavailable."""
+    import subprocess
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(repo), stderr=subprocess.DEVNULL,
+            text=True, timeout=2,
+        ).strip()
+    except Exception:
+        return ""
+
+
+def _resolve_sibling_repo(repo_root: Path, name: str, env_var: str) -> Path:
+    env = os.environ.get(env_var)
+    if env:
+        return Path(env).resolve()
+    return repo_root.parent / name
+
+
+def _model_provenance(model_path: str, backend: str) -> tuple[str, str]:
+    """Return normalized (model_name, quantization) for result provenance."""
+    if not model_path:
+        return (os.environ.get("ANTHROPIC_MODEL") or backend, "not_applicable")
+
+    name = Path(model_path).name
+    if name.endswith(".gguf"):
+        name = name[:-5]
+
+    quant = "NOT RECORDED IN SOURCE FILE"
+    m = re.search(r"(Q\d(?:_[A-Z0-9]+)+|F16|FP16|BF16|Q8_0)$", name)
+    if m:
+        quant = m.group(1)
+        name = name[:m.start()].rstrip("-_")
+    return (name or model_path, quant)
+
+
 # ── main async loop ───────────────────────────────────────────────────────────
 
 async def main_async(args) -> int:
@@ -529,29 +567,25 @@ async def main_async(args) -> int:
           f"({dg_default_rate*100:.0f}%)")
     print()
 
-    # Capture the agent's git commit so a result file is traceable to
-    # exact source. Cheap: one subprocess call; non-fatal on failure
-    # (e.g. CI machines without git).
-    import subprocess
-    def _git_commit(repo: Path) -> str:
-        try:
-            return subprocess.check_output(
-                ["git", "rev-parse", "--short", "HEAD"],
-                cwd=str(repo), stderr=subprocess.DEVNULL,
-                text=True, timeout=2,
-            ).strip()
-        except Exception:
-            return ""
-
     repo_root = Path(__file__).resolve().parents[1]
-    agent_root = repo_root.parent / "therapy-agent"
+    agent_root = get_therapy_agent_root()
+    g2p_rag_root = _resolve_sibling_repo(repo_root, "g2p-rag", "G2P_RAG_ROOT")
+    backend = os.environ.get("THERAPY_AGENT_LLM_BACKEND", "anthropic")
+    model_path = os.environ.get("LLAMA_MODEL_PATH", "")
+    model_name, quantization = _model_provenance(model_path, backend)
 
     if args.out:
         Path(args.out).write_text(json.dumps({
-            "backend": os.environ.get("THERAPY_AGENT_LLM_BACKEND", "anthropic"),
-            "model_path": os.environ.get("LLAMA_MODEL_PATH", ""),
+            "schema_version": "benchmark-result/v2",
+            "run_date_utc": datetime.now(timezone.utc).date().isoformat(),
+            "backend": backend,
+            "model_path": model_path,
+            "model_name": model_name,
+            "quantization": quantization,
             "stack_commit": _git_commit(repo_root),
             "agent_commit": _git_commit(agent_root),
+            "therapy_agent_commit": _git_commit(agent_root),
+            "g2p_rag_commit": _git_commit(g2p_rag_root),
             "n_cases": n,
             "target_recovered": target_n,
             "modality_recovered": modality_n,

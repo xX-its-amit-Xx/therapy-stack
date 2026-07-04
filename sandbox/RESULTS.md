@@ -1,10 +1,14 @@
-# Per-case results — full e2e run
+# Quickstart Demo Results — Llama-3.2-3B, 10 cases
 
 **Model:** `Llama-3.2-3B-Instruct-Q4_K_M.gguf` (Q4_K_M, llama-cpp-python, CPU)  
 **Retriever:** UniProt REST  
 **Cases:** 10 real FDA approvals from `fda-strategy-triples` v0.1.0  
 **Recovered:** 8 / 10  
 **Mean rank of correct target:** 1.62
+
+This is the quickstart demo result, sourced from `sandbox/results_all.json`.
+It is separate from the R1-Distill-8B dev/val/adversarial benchmark suite in
+`results/ledger.json`.
 
 | # | Drug | Disease gene(s) | Gold target | Top-1 prediction | Rank | Recovered |
 |---|---|---|---|---|---|---|

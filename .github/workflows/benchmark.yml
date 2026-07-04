@@ -74,6 +74,12 @@ jobs:
         # before it gets merged.
         run: python scripts/benchmark_lint.py
 
+      - name: Prompt leakage lint
+        # Static check: system prompts must not contain target symbols or
+        # specific aliases from dev / val / adversarial benchmark cases.
+        # Catches the v0.11 prompt-leakage class before it gets merged.
+        run: python scripts/prompt_leakage_lint.py
+
       - name: Docstring lint (every script in scripts/)
         run: python scripts/docs_lint.py
 

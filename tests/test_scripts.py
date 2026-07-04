@@ -96,6 +96,22 @@ def test_lint_passes_on_current_yamls():
     assert _lint(strict=False) == 0
 
 
+def test_prompt_leakage_lint_current_prompts():
+    from prompt_leakage_lint import lint, therapy_agent_root
+    assert lint(therapy_agent_root(_HERE.parent)) == 0
+
+
+def test_render_scorecard_current_ledger():
+    from render_scorecard import load_ledger, render_markdown, verify_sources
+    ledger = _HERE.parent / "results" / "ledger.json"
+    data = load_ledger(ledger)
+    entries = [e for e in data["entries"] if e.get("show_in_scorecard")]
+    verify_sources(entries, _HERE.parent)
+    table = render_markdown(entries)
+    assert "10/16 (62%; 95% CI 39-82%)" in table
+    assert "12/16" not in table
+
+
 # ── replicate_budget ──────────────────────────────────────────────────────────
 
 def test_replicate_budget_small_improvement():

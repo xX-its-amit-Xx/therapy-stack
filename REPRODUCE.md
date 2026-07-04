@@ -100,7 +100,7 @@ desired file.
 | Provider | Model id | Used by |
 |---|---|---|
 | Anthropic | `claude-sonnet-4-6` | CI benchmark job (`.github/workflows/benchmark.yml` line 146/155) |
-| Anthropic | `claude-opus-4-7` | production path (g2p-agent default) |
+| Anthropic | `claude-opus-4-7` | production path (therapy-agent default) |
 | OpenAI | `gpt-4o-2024-08-06` | v0.7+frontier dev scorecard, rationale_judge |
 | OpenAI | `gpt-4o-mini-2024-07-18` | rationale_judge cheap mode |
 

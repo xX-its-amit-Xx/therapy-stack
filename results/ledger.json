@@ -1,0 +1,90 @@
+{
+  "schema_version": "therapy-stack-results-ledger/v1",
+  "notes": [
+    "This ledger is the authoritative source for current public scorecard rows.",
+    "Historical result JSON files that predate benchmark-result/v2 did not record run date, therapy-agent commit, or g2p-rag commit. Those fields are deliberately marked NOT RECORDED IN SOURCE FILE.",
+    "New runs written by sandbox/run_blinded.py include run_date_utc, therapy_agent_commit, g2p_rag_commit, model_name, and quantization."
+  ],
+  "entries": [
+    {
+      "version_tag": "quickstart_demo_results_all",
+      "label": "Quickstart Demo",
+      "split": "demo-10",
+      "date": "NOT RECORDED IN SOURCE FILE",
+      "therapy_agent_commit": "NOT RECORDED IN SOURCE FILE",
+      "g2p_rag_commit": "NOT RECORDED IN SOURCE FILE",
+      "backend": "llama-cpp-python CPU",
+      "model": "Llama-3.2-3B-Instruct",
+      "quantization": "Q4_K_M",
+      "n_cases": 10,
+      "recovered_count": 8,
+      "wall_seconds": "NOT RECORDED IN SOURCE FILE",
+      "source_result_file": "sandbox/results_all.json",
+      "show_in_scorecard": false
+    },
+    {
+      "version_tag": "v20_dev_llama",
+      "label": "R1-Distill 8B local + cache",
+      "split": "dev",
+      "date": "NOT RECORDED IN SOURCE FILE",
+      "therapy_agent_commit": "NOT RECORDED IN SOURCE FILE",
+      "g2p_rag_commit": "NOT RECORDED IN SOURCE FILE",
+      "backend": "llama-cpp-python CPU",
+      "model": "DeepSeek-R1-Distill-Llama-8B",
+      "quantization": "Q4_K_M",
+      "n_cases": 16,
+      "recovered_count": 10,
+      "wall_seconds": 8868.0,
+      "source_result_file": "sandbox/blinded_v20_dev_llama.json",
+      "show_in_scorecard": true
+    },
+    {
+      "version_tag": "v20_val_llama",
+      "label": "R1-Distill 8B local + cache",
+      "split": "val",
+      "date": "NOT RECORDED IN SOURCE FILE",
+      "therapy_agent_commit": "NOT RECORDED IN SOURCE FILE",
+      "g2p_rag_commit": "NOT RECORDED IN SOURCE FILE",
+      "backend": "llama-cpp-python CPU",
+      "model": "DeepSeek-R1-Distill-Llama-8B",
+      "quantization": "Q4_K_M",
+      "n_cases": 12,
+      "recovered_count": 9,
+      "wall_seconds": 5939.4,
+      "source_result_file": "sandbox/blinded_v20_val_llama.json",
+      "show_in_scorecard": true
+    },
+    {
+      "version_tag": "v20_adv_llama",
+      "label": "R1-Distill 8B local + cache",
+      "split": "adversarial",
+      "date": "NOT RECORDED IN SOURCE FILE",
+      "therapy_agent_commit": "NOT RECORDED IN SOURCE FILE",
+      "g2p_rag_commit": "NOT RECORDED IN SOURCE FILE",
+      "backend": "llama-cpp-python CPU",
+      "model": "DeepSeek-R1-Distill-Llama-8B",
+      "quantization": "Q4_K_M",
+      "n_cases": 4,
+      "recovered_count": 1,
+      "wall_seconds": 2391.4,
+      "source_result_file": "sandbox/blinded_v20_adv_llama.json",
+      "show_in_scorecard": true
+    },
+    {
+      "version_tag": "v11_expanded",
+      "label": "R1-Distill 8B local",
+      "split": "dev",
+      "date": "NOT RECORDED IN SOURCE FILE",
+      "therapy_agent_commit": "NOT RECORDED IN SOURCE FILE",
+      "g2p_rag_commit": "NOT RECORDED IN SOURCE FILE",
+      "backend": "llama-cpp-python CPU",
+      "model": "DeepSeek-R1-Distill-Llama-8B",
+      "quantization": "Q4_K_M",
+      "n_cases": 16,
+      "recovered_count": 12,
+      "wall_seconds": 7593.9,
+      "source_result_file": "sandbox/blinded_v11_expanded.json",
+      "show_in_scorecard": false
+    }
+  ]
+}

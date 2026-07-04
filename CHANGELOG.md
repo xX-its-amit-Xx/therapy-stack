@@ -5,6 +5,13 @@ The headline number is dev / val target recovery on the configuration
 used at that version; cells marked "n/a" mean that split / metric
 didn't exist yet at that version.
 
+## 2026-07-04 documentation provenance correction
+
+- Corrected the public architecture naming: the therapeutic-strategy reasoner is `therapy-agent`, not `g2p-agent`. `g2p-agent` remains a real related project for variant-level Q&A over G2P data, but it is not the reasoning component used by this benchmark. This preserves the earlier naming history rather than silently rewriting it.
+- Added a results ledger as the authoritative source for current scorecard rows. Existing `blinded_*.json` files do not record run date or child-repo commits, so those fields are visibly marked `NOT RECORDED IN SOURCE FILE` until a new benchmark run writes them.
+- Reconciled the dev scorecard contradiction: `blinded_v11_expanded` recovered 12/16, but the newer `blinded_v20_dev_llama` recovered 10/16 and is now the current README number.
+- Added `scripts/prompt_leakage_lint.py` and wired it into CI. Current `therapy-agent` system prompts pass after removing benchmark-target examples from generic prompt text.
+
 | Version | Date | Dev | Val | Adv | What changed |
 |---|---|---|---|---|---|
 | v0.1 | 2026-05-26 | 8/10 (orig 10) | n/a | n/a | First end-to-end on local Llama 3.2 3B with hand-rolled retriever |

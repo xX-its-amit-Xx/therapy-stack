@@ -42,7 +42,7 @@ For machines without a built G2P index, the [`sandbox/`](sandbox/) harness subst
 
 Critically, the retriever has no knowledge of FDA approvals. The agent must reason from pathway/PTM/interaction evidence to an intervention target, not memorize approved drugs.
 
-### `g2p-agent` — reasoning
+### `therapy-agent` — reasoning
 
 The agent that produces hypotheses. Its contract:
 
@@ -51,9 +51,11 @@ Input:  disease_gene (str), retrieved_context (list[chunk])
 Output: ranked list of TherapeuticStrategy {target, modality, rationale, confidence}
 ```
 
-`g2p-agent` ships with two backends: an `AnthropicLLM` that drives Claude with tool-use, and a deterministic `MockLLM` for offline reproducibility. The [`sandbox/agent.py`](sandbox/agent.py) demo adds a third path: a local Llama-3.2-3B model via `llama-cpp-python` (CPU, no API key). All three obey the same contract — the orchestration layer doesn't change.
+`therapy-agent` ships the LangGraph pipeline used for therapeutic-strategy generation. It can run through an Anthropic backend or a local Llama backend via `llama-cpp-python` (CPU, no API key). Both obey the same contract — the orchestration layer doesn't change.
 
 The agent deliberately does **not** see the gold-standard intervention. v0.2.0 will introduce multi-step reasoning where the agent issues follow-up retrieval calls.
+
+Related project: `g2p-agent` is a separate variant-interpretation Q&A agent over G2P data. It is useful context for the ecosystem, but it is not the reasoning component in this therapeutic-strategy benchmark.
 
 ### `bio-rag-eval` — judging
 
@@ -72,7 +74,7 @@ The output is a structured scorecard — JSON + markdown rendered into the READM
    a. retriever.retrieve(case.disease_gene) → biology_context
       (G2PRetriever in production; UniProt REST in sandbox/)
    b. agent.propose(case.disease_gene, biology_context) → hypotheses
-      (g2p-agent + Claude in production; Llama 3.2 3B in sandbox/)
+      (therapy-agent + Claude in production; Llama 3.2 3B in sandbox/)
    c. judge.score(hypotheses, case.molecular_target) → CaseScore
       (bio-rag-eval in production; deterministic symbol overlap in sandbox/)
 3. Aggregate -> scorecard HTML / markdown.
@@ -83,7 +85,7 @@ There are two driver paths:
 | Path | Driver | Model | Status |
 |---|---|---|---|
 | Sandbox (real, local, no key) | [`sandbox/run_e2e.py`](sandbox/run_e2e.py) | Llama-3.2-3B-Instruct via llama-cpp-python | **Working; 8/10 recovered** |
-| Claude / production | direct use of `g2p-agent` + `bio-rag-eval` against a built `g2p-rag` index | claude-opus-4-7 via Anthropic SDK | Requires `ANTHROPIC_API_KEY` + a `g2p-rag` ingest |
+| Claude / production | direct use of `therapy-agent` + `bio-rag-eval` against a built `g2p-rag` index | claude-opus-4-7 via Anthropic SDK | Requires `ANTHROPIC_API_KEY` + a `g2p-rag` ingest |
 
 ## What lives here vs. what doesn't
 
@@ -91,7 +93,7 @@ There are two driver paths:
 |---|---|
 | Case curation, dataset validation | `fda-strategy-triples` |
 | G2P portal ingestion, embedding, retrieval | `g2p-rag` |
-| Claude tool-using agent loop, prompts | `g2p-agent` |
+| Therapeutic-strategy agent loop, prompts | `therapy-agent` |
 | Scoring metrics, judge prompts, HTML rendering | `bio-rag-eval` |
 | Pinning versions, wiring components, running demos, documentation | `therapy-stack` (this repo) |
 | Minimal local-only stand-ins (UniProt retriever, Llama agent, deterministic judge) for environments without API keys / G2P index | `therapy-stack/sandbox/` |
@@ -105,7 +107,7 @@ Every published scorecard is pinned to:
 - A `requirements.txt` snapshot listing exact versions of the four packages
 - A `fda-strategy-triples` release tag (the case set as of that date)
 - A `g2p-rag` release tag (the embedding index)
-- A `g2p-agent` release tag (the model + prompt version)
+- A `therapy-agent` release tag (the model + prompt version)
 - A model identifier in the agent (e.g. `claude-opus-4-7` for production, `Llama-3.2-3B-Instruct-Q4_K_M` for the sandbox)
 
 The current real result (2026-05-26) is in [`sandbox/RESULTS.md`](sandbox/RESULTS.md).

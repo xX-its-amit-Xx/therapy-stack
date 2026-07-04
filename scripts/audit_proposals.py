@@ -40,6 +40,7 @@ CLI
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from collections import defaultdict
@@ -48,7 +49,6 @@ from typing import Optional
 
 import chromadb
 
-DEFAULT_CHROMA_DIR = "d:/Users/ashenoy00000/.windsurf/g2p-rag/data/chroma"
 COLLECTION = "g2p_proteins"
 
 # Citation token. Tolerates both halves of the prefix:protein_summary:1-766
@@ -316,7 +316,16 @@ def audit_proposals(
     return 0 if fail_cites == 0 else 1
 
 
+def default_chroma_dir() -> str:
+    """Resolve the g2p-rag Chroma directory without a developer-local path."""
+    env = os.environ.get("G2P_INDEX_DIR") or os.environ.get("G2P_CHROMA_PATH")
+    if env:
+        return env
+    return str(Path(__file__).resolve().parents[2] / "g2p-rag" / "data" / "chroma")
+
+
 def main(argv: Optional[list[str]] = None) -> int:
+    default_chroma = default_chroma_dir()
     ap = argparse.ArgumentParser(
         description=(
             "Audit chunk citations in a PROPOSALS.md against the g2p-rag "
@@ -327,8 +336,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("proposals", type=Path, help="path to PROPOSALS.md")
     ap.add_argument(
         "--chroma-path",
-        default=DEFAULT_CHROMA_DIR,
-        help=f"override the Chroma persist directory (default: {DEFAULT_CHROMA_DIR})",
+        default=default_chroma,
+        help=(
+            "override the Chroma persist directory "
+            f"(default: G2P_INDEX_DIR/G2P_CHROMA_PATH or {default_chroma})"
+        ),
     )
     ap.add_argument(
         "--strict",

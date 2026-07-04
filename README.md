@@ -6,6 +6,8 @@
 
 Domain algorithms live in the four child repos. This repo holds the orchestration, the published docs, and a minimal end-to-end harness in [`sandbox/`](sandbox/) that runs the whole pipeline locally against real data with **no API keys required** — a free, open-source 3 B Llama model on CPU.
 
+Publication-readiness guardrails: see [`LIMITATIONS.md`](LIMITATIONS.md) for the honest limitations and [`results/ledger.json`](results/ledger.json) for the authoritative scorecard source.
+
 ---
 
 ## Architecture
@@ -21,7 +23,7 @@ flowchart LR
     end
 
     subgraph agent[Reasoning]
-        TA[g2p-agent<br/><sub>LLM agent that<br/>proposes strategies</sub>]
+        TA[therapy-agent<br/><sub>LangGraph agent that<br/>proposes strategies</sub>]
     end
 
     subgraph eval[Evaluation]
@@ -39,7 +41,7 @@ flowchart LR
 
 ## Why four repos?
 
-Each child repo solves one well-defined problem and is independently testable, citable, and installable. The split mirrors the natural boundaries of the system: a dataset (`fda-strategy-triples`), a retriever (`g2p-rag`), a reasoner (`g2p-agent`), and a judge (`bio-rag-eval`). Anyone can swap out a single component — a different retriever, a different judge model — without forking the whole stack. `therapy-stack` is the demo that proves the pieces fit together.
+Each child repo solves one well-defined problem and is independently testable, citable, and installable. The split mirrors the natural boundaries of the system: a dataset (`fda-strategy-triples`), a retriever (`g2p-rag`), a reasoner (`therapy-agent`), and a judge (`bio-rag-eval`). Anyone can swap out a single component — a different retriever, a different judge model — without forking the whole stack. `therapy-stack` is the demo that proves the pieces fit together.
 
 Child repos:
 
@@ -47,8 +49,10 @@ Child repos:
 |---|---|
 | [`fda-strategy-triples`](https://github.com/xX-its-amit-Xx/fda-strategy-triples) | Curated dataset of FDA-approved therapeutic strategies as (gene, mechanism, drug) triples — 10 cases, human-validated against ChEMBL/DrugBank/DailyMed |
 | [`g2p-rag`](https://github.com/xX-its-amit-Xx/g2p-rag) | Hybrid dense+sparse retrieval over the Broad Institute G2P portal (UniProt + AlphaFold + ClinVar) |
-| [`g2p-agent`](https://github.com/xX-its-amit-Xx/g2p-agent) | Claude tool-using agent that answers variant-level questions over the g2p-rag index |
+| [`therapy-agent`](https://github.com/xX-its-amit-Xx/therapy-agent) | LangGraph therapeutic-strategy agent that proposes targets from disease mechanism + retrieved biology |
 | [`bio-rag-eval`](https://github.com/xX-its-amit-Xx/bio-rag-eval) | LLM-as-judge evaluation harness with deterministic + semantic scoring |
+
+Related project: [`g2p-agent`](https://github.com/xX-its-amit-Xx/g2p-agent) is a separate variant-interpretation Q&A tool built on the same G2P data. Older issues and notes may mention it because early architecture docs used that name for the reasoner, but it is not the therapeutic-strategy agent in this pipeline.
 
 ---
 
@@ -87,6 +91,32 @@ $env:THERAPY_AGENT_LLM_BACKEND = "llama"
 ./.venv/Scripts/python.exe run_blinded.py --out blinded_results.json
 ```
 
+Linux/macOS equivalent:
+
+```bash
+git clone https://github.com/xX-its-amit-Xx/therapy-stack.git
+cd therapy-stack/sandbox
+
+uv venv --python 3.11 .venv
+
+uv pip install --python ./.venv/bin/python \
+    llama-cpp-python \
+    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+uv pip install --python ./.venv/bin/python \
+    langgraph langchain-core httpx typer rich pydantic pyyaml \
+    tenacity python-dotenv huggingface_hub pandas pyarrow requests
+uv pip install --python ./.venv/bin/python \
+    -e ../../fda-strategy-triples --no-deps \
+    -e ../../therapy-agent --no-deps
+
+mkdir -p "${HOME}/llama-models"
+./.venv/bin/python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='bartowski/Llama-3.2-3B-Instruct-GGUF', filename='Llama-3.2-3B-Instruct-Q4_K_M.gguf', local_dir='${HOME}/llama-models')"
+
+export THERAPY_AGENT_LLM_BACKEND=llama
+export LLAMA_MODEL_PATH="${HOME}/llama-models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+./.venv/bin/python run_blinded.py --out blinded_results.json
+```
+
 To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_BACKEND=anthropic`. The prompts and tooling are identical.
 
 ---
@@ -100,19 +130,21 @@ To run the Claude path instead, set `ANTHROPIC_API_KEY` and `THERAPY_AGENT_LLM_B
 
 ---
 
-## Latest scorecard — v0.8 (R1-Distill local, expanded val) + v0.9.x guards
+## Latest scorecard — v0.8/v20 benchmark suite
 
-The current best fully-open-weight result on a 12-case val split (post-2024 NMEs, all post-pretraining-cutoff for R1-Distill 8B):
+The current open-weight benchmark result is rendered from [`results/ledger.json`](results/ledger.json) via [`scripts/render_scorecard.py`](scripts/render_scorecard.py). Existing result files do not record run date or child-repo commits, so those provenance fields are explicitly marked in the ledger instead of being reconstructed.
 
+<!-- BEGIN SCORECARD -->
 | Backend | Split | Target | Wall | Cost |
 |---|---|---|---|---|
-| R1-Distill 8B local | dev | 12/16 (75%) | 127 min | $0 |
-| R1-Distill 8B local | val | **9/12 (75%)** | 99 min | $0 |
-| R1-Distill 8B local | adversarial | 1/4 (25%) | 40 min | $0 |
-| GPT-4o + ReAct + SC3 | dev | 15/16 (94%) | 6 min | $0.06 |
-| GPT-4o + ReAct + SC3 | val (6-case subset) | 4/6 (67%) | 4 min | $0.03 |
+| R1-Distill 8B local + cache | dev | 10/16 (62%; 95% CI 39-82%) | 148 min | local |
+| R1-Distill 8B local + cache | val | 9/12 (75%; 95% CI 47-91%) | 99 min | local |
+| R1-Distill 8B local + cache | adversarial | 1/4 (25%; 95% CI 5-70%) | 40 min | local |
+<!-- END SCORECARD -->
 
-**Caveats:** N is small (Wilson 95% CI on 9/12 val is 46–91%). The GPT-4o val number is on the original 6 cases; R1-Distill ran on the expanded 12. See [honest limitations](#honest-limitations-the-hidden-curriculum) and [`sandbox/COST_FRONTIER.md`](sandbox/COST_FRONTIER.md) for the full split-stratified comparison.
+Footnote: the older `blinded_v11_expanded` dev run recovered 12/16. The more recent committed `blinded_v20_dev_llama` run recovered 10/16 with caching, so 10/16 is the current README number. See [`sandbox/COST_FRONTIER.md`](sandbox/COST_FRONTIER.md) for the 12/16 -> 10/16 history and [`results/ledger.json`](results/ledger.json) for the source files.
+
+**Caveats:** N is small (Wilson 95% CI on 9/12 val is 47-91%). The quickstart demo and the benchmark suite use different models and different result files; do not compare them as one undifferentiated "sandbox" result. See [honest limitations](#honest-limitations-the-hidden-curriculum), [`LIMITATIONS.md`](LIMITATIONS.md), and [`sandbox/COST_FRONTIER.md`](sandbox/COST_FRONTIER.md) for the split-stratified comparison.
 
 **v0.9.x strategy guards added (this round):** v0.9 disease_gene_default guard; v0.9.2b unconditional feedback-axis override (pattern 9, fires on phenotype markers like "ACTH-driven"); v0.9.3 mechanism-pattern guard (LoF + disease_gene_mRNA → downstream_effector); v0.9.4 picker prompt rule for feedback_axis_receptor. Smoke verifies Crinecerfont moved off disease-gene-default (`disease_gene_default_rate` 100% → 0%) — predicted NR3C1 instead of CYP21A2; correct pattern category, wrong specific receptor. See [`CHANGELOG.md`](CHANGELOG.md) for the lever-by-lever lift.
 
@@ -202,11 +234,11 @@ If you use `therapy-stack` or any of its components in your research, please cit
   version = {0.1.0}
 }
 
-@software{shenoy_g2p_agent_2026,
+@software{shenoy_therapy_agent_2026,
   author  = {Shenoy, Amit},
-  title   = {g2p-agent: A retrieval-augmented Claude agent over G2P portal data},
+  title   = {therapy-agent: A LangGraph agent for therapeutic strategy generation},
   year    = {2026},
-  url     = {https://github.com/xX-its-amit-Xx/g2p-agent},
+  url     = {https://github.com/xX-its-amit-Xx/therapy-agent},
   version = {0.1.0}
 }
 
